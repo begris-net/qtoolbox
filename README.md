@@ -1,0 +1,2 @@
+# qsdk
+Simple SDK helper
