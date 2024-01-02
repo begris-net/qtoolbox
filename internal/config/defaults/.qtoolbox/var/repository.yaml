@@ -1,0 +1,102 @@
+update_url: https://toolbox.github.io
+#platform: x64
+#os: windows
+candidates:
+  - name: java
+    display-name: Java
+    description: |
+      Java (21.0.1-tem)        https://projects.eclipse.org/projects/adoptium.temurin/
+
+      Java Platform, Standard Edition (or Java SE) is a widely used platform for
+      development and deployment of portable code for desktop and server environments.
+      Java SE uses the object-oriented Java programming language. It is part of the
+      Java software-platform family. Java SE defines a wide range of general-purpose
+      APIs – such as Java APIs for the Java Class Library – and also includes the Java
+      Language Specification and the Java Virtual Machine Specification.
+    provider:
+      zulu:
+        id: zulu
+        vendor: Azul
+        type: Zulu
+        endpoint: https://api.azul.com/metadata/v1
+      amazon-corretto-21:
+        id: amzn
+        vendor: Amazon
+        type: GitHubRelease
+        endpoint: corretto/corretto-21
+      amazon-corretto-17:
+        id: amzn
+        vendor: Amazon
+        type: GitHubRelease
+        endpoint: corretto/corretto-17
+      amazon-corretto-11:
+        id: amzn
+        vendor: Amazon
+        type: GitHubRelease
+        endpoint: corretto/corretto-11
+      graal-17:
+        id: graal
+        vendor: Oracle
+        type: Download
+        endpoint: https://download.oracle.com/java/21/archive/jdk-21.0.1_windows-x64_bin.zip
+  - name: maven
+    display-name: Maven
+    description: |
+      Maven (3.9.6)                                          https://maven.apache.org/
+
+      Apache Maven is a software project management and comprehension tool. Based on
+      the concept of a project object model (POM), Maven can manage a project's build,
+      reporting and documentation from a central piece of information.
+    provider:
+      maven:
+        id: maven
+        type: MavenRelease
+        endpoint: org.apache.maven:apache-maven
+  - name: groovy
+    display-name: Groovy
+    description: |
+      Groovy (4.0.16)                                      http://www.groovy-lang.org/
+
+      Groovy is a powerful, optionally typed and dynamic language, with static-typing
+      and static compilation capabilities, for the Java platform aimed at multiplying
+      developers' productivity thanks to a concise, familiar and easy to learn syntax.
+      It integrates smoothly with any Java program, and immediately delivers to your
+      application powerful features, including scripting capabilities, Domain-Specific
+      Language authoring, runtime and compile-time meta-programming and functional
+      programming.
+    provider:
+      groovy:
+        id: groovy # if id is equal to the candidate name, it will be omitted
+        type: MavenRelease
+        endpoint: org.apache.maven:apache-maven
+        #endpoint: https://archive.apache.org/dist/groovy
+  - name: k9s
+    description: |
+      k9s (0.30.3)                                     https://github.com/derailed/k9s
+      
+      Kubernetes CLI To Manage Your Clusters In Style! 
+      
+      K9s provides a terminal UI to interact with your Kubernetes clusters. The aim of
+      this project is to make it easier to navigate, observe and manage your applica-
+      tions in the wild. K9s continually watches Kubernetes for changes and offers 
+      subsequent commands to interact with your observed resources.
+    provider:
+      k9s-github:
+        id: k9s
+        vendor: derailed
+        type: GitHubRelease
+        endpoint: derailed/k9s # org-id/repo
+        pre-releases: true #default: false
+        extract: k9s.exe
+  - name: kubectl
+    description: |
+      kubectl
+    provider:
+      kubectl-github:
+        type: GitHubTagsDownloadUrl
+        endpoint: kubernetes/kubernetes # org-id/repo
+        url: https://dl.k8s.io/release/__VERSION__/bin/__OS__/__ARCH__/kubectl__EXT__
+        version-cleanup: ^[[:alpha:]]+\s #regex to clean up version string, currently only supported by github based providers
+#  - argocd-cli:
+#  - stern:
+#  - github-cli:
