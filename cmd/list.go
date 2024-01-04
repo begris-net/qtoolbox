@@ -64,7 +64,7 @@ func list(cmd *cobra.Command, args []string) {
 
 	if hasCandidate {
 
-		cadidateDescription, candidateVersions, hasMultipleProviderIds := repositoryConfig.ListCandidateVersions(CandidateName)
+		candidateDescription, candidateVersions, hasMultipleProviderIds := repositoryConfig.ListCandidateVersions(CandidateName)
 
 		if hasMultipleProviderIds {
 			// TODO Display MultiProvider Table
@@ -78,7 +78,7 @@ func list(cmd *cobra.Command, args []string) {
 				}
 			}
 
-			ui.NewViewItem(fmt.Sprintf("Available %s Versions", displayName(cadidateDescription)),
+			ui.NewViewItem(fmt.Sprintf("Available %s Versions", displayName(candidateDescription)),
 				gostream.FlatMap(gostream.Of(candidateVersions...).Sorted(func(a, b candidate.Candidate) int {
 					return b.Version.Compare(&a.Version)
 				}), func(t candidate.Candidate) gostream.Stream[ui.ViewElement] {
@@ -99,7 +99,7 @@ func list(cmd *cobra.Command, args []string) {
 				}
 			}
 
-			ui.NewViewItem(fmt.Sprintf("Available %s Versions", displayName(cadidateDescription)),
+			ui.NewViewItem(fmt.Sprintf("Available %s Versions", displayName(candidateDescription)),
 				gostream.FlatMap(gostream.Of(candidateVersions...).Sorted(func(a, b candidate.Candidate) int {
 					return b.Version.Compare(&a.Version)
 				}), func(t candidate.Candidate) gostream.Stream[ui.ViewElement] {
