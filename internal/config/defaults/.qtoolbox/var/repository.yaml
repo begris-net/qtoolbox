@@ -13,11 +13,13 @@ candidates:
       Java software-platform family. Java SE defines a wide range of general-purpose
       APIs – such as Java APIs for the Java Class Library – and also includes the Java
       Language Specification and the Java Virtual Machine Specification.
+    default-provider-id: zulu # only required, if multiple provider ids are present. Mainly to determine the latest version during the install command without a specific version
     provider:
       zulu:
         id: zulu
         vendor: Azul
         type: Zulu
+        default: true
         endpoint: https://api.azul.com/metadata/v1
       amazon-corretto-21:
         id: amzn

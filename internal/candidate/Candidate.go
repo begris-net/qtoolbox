@@ -29,9 +29,10 @@ type CandidateProvider struct {
 }
 
 type CandidateDescription struct {
-	Name        string
-	DisplayName *string
-	Description *string
+	Name              string
+	DisplayName       *string
+	Description       *string
+	DefaultProviderId *string
 }
 
 func (c Candidate) CandidateId() {
