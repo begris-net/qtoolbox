@@ -2,8 +2,10 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/BooleanCat/go-functional/iter"
+	"github.com/YoshikiShibata/gostream"
 	"github.com/begris-net/qtoolbox/internal/cache"
 	"github.com/begris-net/qtoolbox/internal/candidate"
 	"github.com/begris-net/qtoolbox/internal/log"
@@ -89,6 +91,12 @@ func (d *GithubDistribution) ListReleases(multipleProviders bool, provider candi
 }
 
 func (d *GithubDistribution) Download(candidate candidate.Candidate) error {
-	//TODO implement me
-	panic("implement me")
+	releases := d.getCachedReleases(candidate.Provider)
+	log.Logger.Info(fmt.Sprintf("Fetched %d releases from provider %s.", len(releases), candidate.Provider.ProviderRepoId))
+
+	gostream.Of(releases...).ForEach(func(t *github.RepositoryRelease) {
+		//github.RepositoryRelease.GetAssetsURL()
+	})
+
+	return errors.New("not yet implemented")
 }
