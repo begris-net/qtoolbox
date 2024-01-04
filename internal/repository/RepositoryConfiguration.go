@@ -12,10 +12,11 @@ type Repository struct {
 }
 
 type CandidateInfo struct {
-	Name        string                  `yaml:"name"`
-	DisplayName string                  `yaml:"display-name,omitempty"`
-	Description string                  `yaml:"description,omitempty"`
-	Provider    map[string]ProviderInfo `yaml:"provider,flow"`
+	Name              string                  `yaml:"name"`
+	DisplayName       string                  `yaml:"display-name,omitempty"`
+	Description       string                  `yaml:"description,omitempty"`
+	DefaultProviderId string                  `yaml:"default-provider-id,omitempty"`
+	Provider          map[string]ProviderInfo `yaml:"provider,flow"`
 }
 
 type ProviderInfo struct {

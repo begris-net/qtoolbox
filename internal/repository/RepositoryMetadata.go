@@ -56,9 +56,10 @@ func (repository *Repository) FetchCandidateProvider(candidateName string) (
 	candidateInfo := repository.findCandidate(candidateName)
 
 	cadidateDescription := candidate.CandidateDescription{
-		Name:        candidateInfo.Name,
-		DisplayName: &candidateInfo.DisplayName,
-		Description: &candidateInfo.Description,
+		Name:              candidateInfo.Name,
+		DisplayName:       &candidateInfo.DisplayName,
+		Description:       &candidateInfo.Description,
+		DefaultProviderId: &candidateInfo.DefaultProviderId,
 	}
 
 	mapCandidate := func(repoId string, t ProviderInfo) candidate.CandidateProvider {
