@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/begris-net/qtoolbox/internal/provider"
 	"github.com/begris-net/qtoolbox/internal/types"
+	"github.com/mitchellh/go-homedir"
 	"gopkg.in/yaml.v3"
 	"os"
 	"path"
@@ -42,7 +43,7 @@ func LoadConfig(cfgFile string) *Config {
 	var basepath string
 	if len(cfgFile) <= 0 {
 
-		homeDir, errHomeDir := os.UserHomeDir()
+		homeDir, errHomeDir := homedir.Dir()
 		if errHomeDir != nil {
 			panic(errHomeDir)
 		}

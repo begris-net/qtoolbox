@@ -30,6 +30,7 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/mariomac/gostream v0.8.1 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/pterm/pterm v0.12.73 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect

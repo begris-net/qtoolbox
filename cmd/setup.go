@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/begris-net/qtoolbox/internal/config"
 	"github.com/begris-net/qtoolbox/internal/config/defaults"
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"io/fs"
 	"os"
@@ -26,7 +27,7 @@ and adds the toolbox command to your system PATH.`,
 }
 
 func setup(cmd *cobra.Command, args []string) {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := homedir.Dir()
 	fmt.Printf("%v", homeDir)
 
 	if _, err := os.Stat(filepath.Join(homeDir, config.QToolboxDirectory)); err == nil {
