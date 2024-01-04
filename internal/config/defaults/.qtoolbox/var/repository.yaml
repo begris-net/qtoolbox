@@ -71,7 +71,10 @@ candidates:
         id: groovy # if id is equal to the candidate name, it will be omitted
         type: MavenRelease
         endpoint: org.apache.maven:apache-maven
-        #endpoint: https://archive.apache.org/dist/groovy
+      groovy-legacy:
+        id: groovy # if id is equal to the candidate name, it will be omitted
+        type: MavenRelease
+        endpoint: org.codehaus.groovy:groovy-binary
   - name: k9s
     description: |
       k9s (0.30.3)                                     https://github.com/derailed/k9s
