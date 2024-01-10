@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/YoshikiShibata/gostream"
 	"github.com/begris-net/qtoolbox/internal/candidate"
+	"github.com/begris-net/qtoolbox/internal/config"
 	"github.com/begris-net/qtoolbox/internal/log"
 	"github.com/begris-net/qtoolbox/internal/provider"
 	"github.com/begris-net/qtoolbox/internal/repository"
@@ -39,15 +40,17 @@ Java has a custom list view with vendor-specific details.`,
 }
 
 func validInstallCandidates(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if len(args) >= 2 {
+	cmd.Flags().Parse(args)
+	cleanedArgs := cmd.Flags().Args()
+
+	if len(cleanedArgs) >= 2 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	println(args)
-	if len(args) >= 1 {
-		return validCandidateVersions(args[0], toComplete)
+	if len(cleanedArgs) >= 1 {
+		return validCandidateVersions(cleanedArgs[0], toComplete)
 	} else {
-		return ValidCandidates(cmd, args, toComplete)
+		return ValidCandidates(cmd, cleanedArgs, toComplete)
 	}
 }
 
@@ -86,7 +89,18 @@ func installCandidate(cmd *cobra.Command, args []string) {
 
 	log.Logger.Debug("Selected installation candidate.", log.Logger.Args("candidate", selectedCandidate))
 
-	provider.Distributor(selectedCandidate.Provider.Type).Download(selectedCandidate)
+	download, err := provider.Distributor(selectedCandidate.Provider.Type).Download(selectedCandidate)
+	if err != nil {
+		log.Logger.Fatal(err.Error())
+	}
+
+	currentConfig, err := config.GetCurrentConfig()
+	if err != nil {
+		log.Logger.Fatal("Error get current configuration.", log.Logger.Args("err", err))
+	}
+
+	download.CheckedDownload(currentConfig.GetCandidateCachePath())
+
 }
 
 func validCandidateVersions(candidateName string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -100,11 +114,13 @@ func validCandidateVersions(candidateName string, toComplete string) ([]string, 
 
 	completionCandidates := gostream.FlatMap(gostream.Of(candidateVersions...).Filter(func(v candidate.Candidate) bool {
 		return strings.HasPrefix(v.DisplayName, toComplete)
+	}).Sorted(func(a, b candidate.Candidate) int {
+		return b.Version.Compare(&a.Version)
 	}), func(v candidate.Candidate) gostream.Stream[string] {
 		return gostream.Of(v.DisplayName)
 	}).ToSlice()
 
-	return completionCandidates, cobra.ShellCompDirectiveNoFileComp
+	return completionCandidates, cobra.ShellCompDirectiveKeepOrder
 }
 
 func init() {
