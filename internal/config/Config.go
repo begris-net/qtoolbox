@@ -12,12 +12,14 @@ import (
 )
 
 const (
-	QToolboxDirectory string = ".qtoolbox"
-	ConfigDir         string = QToolboxDirectory + "/config"
-	CandidatesDir     string = QToolboxDirectory + "/candidatesconfig"
-	HooksDir          string = QToolboxDirectory + "/hooks"
-	VarDir            string = "var"
-	CacheDir          string = VarDir + "/cache"
+	QToolboxDirectory  string = ".qtoolbox"
+	ConfigDir          string = QToolboxDirectory + "/config"
+	CandidatesDir      string = "/candidates"
+	HooksDir           string = QToolboxDirectory + "/hooks"
+	VarDir             string = "var"
+	CacheDir           string = VarDir + "/cache"
+	RepositoryCacheDir string = CacheDir + "/repository"
+	CandidateCacheDir  string = "tmp"
 )
 
 type Config struct {
@@ -27,6 +29,7 @@ type Config struct {
 	Platform           string                                   `yaml:"platform,omitempty"`
 	ProviderSettings   map[types.ProviderType]map[string]string `yaml:"provider-settings"`
 	basePath           string
+	RepositoryCacheDir string
 }
 
 var currentConfig *Config
@@ -75,11 +78,21 @@ func (c *Config) GetRepositoryConfigPath() string {
 	return filepath.Join(c.basePath, c.RepositoryMetadata)
 }
 
+func (c *Config) GetCandidatesBathPath() string {
+	return filepath.Join(c.basePath, CandidatesDir)
+}
+
+func (c *Config) GetCandidateCachePath() string {
+	return filepath.Join(c.basePath, CandidateCacheDir)
+}
+
 func (c *Config) UpdateProviderSettings() {
 	for providerType, settings := range c.ProviderSettings {
 		provider.Distributor(providerType).UpdateProviderSettings(types.ProviderSettings{
-			CachePath: path.Join(c.basePath, CacheDir),
-			Setting:   settings,
+			CachePath:              path.Join(c.basePath, RepositoryCacheDir),
+			CandidatesBathPath:     path.Join(c.basePath, CandidatesDir),
+			CandidatesDownloadPath: path.Join(c.basePath, CandidateCacheDir),
+			Setting:                settings,
 		})
 	}
 }

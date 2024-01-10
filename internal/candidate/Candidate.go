@@ -5,6 +5,7 @@ import (
 	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/begris-net/qtoolbox/internal/util"
 	"github.com/hashicorp/go-version"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -26,6 +27,7 @@ type CandidateProvider struct {
 	Endpoint            string
 	PreRelease          bool
 	VersionCleanupRegex *regexp.Regexp
+	Settings            map[string]any
 }
 
 type CandidateDescription struct {
@@ -37,6 +39,10 @@ type CandidateDescription struct {
 
 func (c Candidate) CandidateId() {
 
+}
+
+func (c Candidate) GetCandidateInstallationDir(candidatesBathPath string) string {
+	return path.Join(candidatesBathPath, c.Provider.Product, c.DisplayName)
 }
 
 func (c Candidate) Show() {

@@ -26,6 +26,7 @@ type ProviderInfo struct {
 	Endpoint       string             `yaml:"endpoint"`
 	PreReleases    bool               `yaml:"pre-releases,omitempty"`
 	VersionCleanup string             `yaml:"version-cleanup"`
+	Settings       map[string]any     `yaml:"settings,omitempty"`
 }
 
 func LoadRepositoryConfig(configPath string) *Repository {

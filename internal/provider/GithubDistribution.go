@@ -8,20 +8,26 @@ import (
 	"github.com/YoshikiShibata/gostream"
 	"github.com/begris-net/qtoolbox/internal/cache"
 	"github.com/begris-net/qtoolbox/internal/candidate"
+	"github.com/begris-net/qtoolbox/internal/installer"
 	"github.com/begris-net/qtoolbox/internal/log"
+	"github.com/begris-net/qtoolbox/internal/provider/platform"
 	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/begris-net/qtoolbox/internal/util"
 	"github.com/google/go-github/v57/github"
+	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type GithubDistribution struct {
-	pageSize  int
-	cacheTtl  time.Duration
-	cachePath string
-	cache     *cache.Cache[[]*github.RepositoryRelease]
+	pageSize               int
+	cacheTtl               time.Duration
+	cachePath              string
+	cache                  *cache.Cache[[]*github.RepositoryRelease]
+	candidatesBathPath     string
+	candidatesDownloadPath string
 }
 
 func (d *GithubDistribution) getCachedReleases(provider candidate.CandidateProvider) []*github.RepositoryRelease {
@@ -56,6 +62,8 @@ func (d *GithubDistribution) UpdateProviderSettings(settings types.ProviderSetti
 		log.Logger.Debug(fmt.Sprintf("Cache TTL for %T is %v.", d, d.cacheTtl))
 	}
 	d.cachePath = settings.CachePath
+	d.candidatesBathPath = settings.CandidatesBathPath
+	d.candidatesDownloadPath = settings.CandidatesDownloadPath
 
 	if d.cache == nil {
 		d.cache = &cache.Cache[[]*github.RepositoryRelease]{}
@@ -90,13 +98,65 @@ func (d *GithubDistribution) ListReleases(multipleProviders bool, provider candi
 	return candidates
 }
 
-func (d *GithubDistribution) Download(candidate candidate.Candidate) error {
-	releases := d.getCachedReleases(candidate.Provider)
-	log.Logger.Info(fmt.Sprintf("Fetched %d releases from provider %s.", len(releases), candidate.Provider.ProviderRepoId))
+func (d *GithubDistribution) Download(installCandidate candidate.Candidate) (*installer.CandidateDownload, error) {
+	releases := d.getCachedReleases(installCandidate.Provider)
+	log.Logger.Info(fmt.Sprintf("Fetched %d releases from provider %s.", len(releases), installCandidate.Provider.ProviderRepoId))
 
-	gostream.Of(releases...).ForEach(func(t *github.RepositoryRelease) {
-		//github.RepositoryRelease.GetAssetsURL()
+	os := runtime.GOOS
+	arch := runtime.GOARCH
+
+	platformHandler := platform.NewPlatformHandler(installCandidate.Provider.Settings)
+
+	log.Logger.Debug(fmt.Sprintf("Going to install version %s of candidate %s.", installCandidate.Version.Original(), installCandidate.Provider.Product))
+	log.Logger.Trace("System detection for download determination", log.Logger.Args("os", runtime.GOOS, "arch", runtime.GOARCH, "GOROOT", runtime.GOROOT()))
+
+	archRegex, err := platformHandler.GetArchitectureRegex(arch)
+	if err != nil {
+		log.Logger.Error(err.Error(), log.Logger.Args("arch", arch))
+		return nil, err
+	}
+
+	extRegex, err := platformHandler.GetExtensionRegex(os)
+	if err != nil {
+		log.Logger.Error(err.Error(), log.Logger.Args("os", os))
+		return nil, err
+	}
+
+	release := gostream.Of(releases...).Filter(func(t *github.RepositoryRelease) bool {
+		return util.SafeDeref(t.Name) == installCandidate.Version.Original()
+	}).FindFirst().OrElsePanic()
+
+	releaseAssets := gostream.Of(release.Assets...).Filter(func(t *github.ReleaseAsset) bool {
+		assetName := strings.ToLower(t.GetName())
+		log.Logger.Trace(fmt.Sprintf("%s --> %s", util.SafeDeref(t.Name), util.SafeDeref(t.BrowserDownloadURL)))
+		return strings.Contains(assetName, platformHandler.MapOS(os)) && archRegex.MatchString(assetName) && extRegex.MatchString(assetName)
+	}).ToSlice()
+
+	if len(releaseAssets) > 1 {
+		assets := make(map[string]any, len(releaseAssets))
+		gostream.Of(releaseAssets...).ForEach(func(t *github.ReleaseAsset) {
+			assets[t.GetName()] = util.SafeDeref(t.BrowserDownloadURL)
+		})
+		log.Logger.Warn("More than one download asset matched matched the criteria. First match is used for download.",
+			log.Logger.Args("criteria os", platformHandler.MapOS(os), "criteria arch", arch, "criteria arch-regex", archRegex, "criteria extension-regex", extRegex),
+			log.Logger.ArgsFromMap(assets))
+	}
+
+	log.Logger.Trace("System detection for download determination", log.Logger.Args("os", runtime.GOOS, "arch", runtime.GOARCH, "GOROOT", runtime.GOROOT()))
+	var candidateDownload *installer.CandidateDownload
+	var noAssetErr error
+	gostream.Of(releaseAssets...).FindFirst().IfPresentOrElse(func(t *github.ReleaseAsset) {
+		downloadUrl, _ := url.Parse(gostream.Of(releaseAssets...).FindFirst().Get().GetBrowserDownloadURL())
+		candidateDownload = &installer.CandidateDownload{
+			Candidate:    installCandidate,
+			DownloadUrl:  downloadUrl,
+			DownloadPath: d.candidatesDownloadPath,
+			InstallPath:  installCandidate.GetCandidateInstallationDir(d.candidatesBathPath),
+			FileMode:     platformHandler.GetSetting(platform.FileMode),
+		}
+	}, func() {
+		noAssetErr = errors.New(fmt.Sprintf("No download asset for candidate %s with version %s found.", installCandidate.Provider.Product, installCandidate.DisplayName))
 	})
 
-	return errors.New("not yet implemented")
+	return candidateDownload, noAssetErr
 }

@@ -72,6 +72,7 @@ func (repository *Repository) FetchCandidateProvider(candidateName string) (
 			Endpoint:            t.Endpoint,
 			PreRelease:          t.PreReleases,
 			VersionCleanupRegex: regexp.MustCompile(t.VersionCleanup),
+			Settings:            t.Settings,
 		}
 	}
 

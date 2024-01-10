@@ -11,8 +11,10 @@ const (
 )
 
 type ProviderSettings struct {
-	CachePath string
-	Setting   map[string]string `yaml:"*,flow"`
+	CachePath              string
+	CandidatesBathPath     string
+	CandidatesDownloadPath string
+	Setting                map[string]string `yaml:"*,flow"`
 }
 
 //func MapProviderTypeByName(providerTypeName string) ProviderType {

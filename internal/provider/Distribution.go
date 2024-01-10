@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"github.com/begris-net/qtoolbox/internal/candidate"
+	"github.com/begris-net/qtoolbox/internal/installer"
 	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/begris-net/qtoolbox/internal/util"
 	"log"
@@ -10,7 +11,7 @@ import (
 
 type Distribution interface {
 	ListReleases(multipleProviders bool, provider candidate.CandidateProvider) []candidate.Candidate
-	Download(candidate candidate.Candidate) error
+	Download(installCandidate candidate.Candidate) (*installer.CandidateDownload, error)
 	UpdateProviderSettings(settings types.ProviderSettings)
 }
 
@@ -33,10 +34,10 @@ func (d DummyDistributor) ListReleases(multipleProviders bool, provider candidat
 	return make([]candidate.Candidate, 0)
 }
 
-func (d DummyDistributor) Download(candidate candidate.Candidate) error {
+func (d DummyDistributor) Download(installCandidate candidate.Candidate) (*installer.CandidateDownload, error) {
 	log.Printf("No provider available for provider %s with type %s.",
-		util.OrElse(candidate.Provider.Vendor, candidate.Provider.Id), candidate.Provider.Type)
-	return nil
+		util.OrElse(installCandidate.Provider.Vendor, installCandidate.Provider.Id), installCandidate.Provider.Type)
+	return nil, nil
 }
 
 var dummy = &DummyDistributor{}

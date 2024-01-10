@@ -15,7 +15,7 @@ func parseVersion(cleanupRegex *regexp.Regexp, version string) (*v.Version, erro
 	} else {
 		extractedVersion = version
 	}
-	log.Logger.Debug(fmt.Sprintf("Extracted version: %v", extractedVersion), log.Logger.Args("original", version))
+	log.Logger.Trace(fmt.Sprintf("Extracted version: %v", extractedVersion), log.Logger.Args("original", version))
 	candidateVersion, err := v.NewSemver(extractedVersion)
 	if err != nil {
 		log.Logger.Warn(fmt.Sprintf("Could not retrieve semantic version for release %s. Trying with more relaxed version instead. %v", version, err))
