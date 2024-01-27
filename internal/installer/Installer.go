@@ -52,7 +52,7 @@ func (d *CandidateDownload) CheckedDownload(destination string) (*req.Response, 
 	candidateArchivePath := filepath.Join(destination, candidateArchive)
 	x := &xtractr.XFile{
 		FilePath:  candidateArchivePath,
-		OutputDir: d.InstallPath, // do not forget this.
+		OutputDir: filepath.FromSlash(d.InstallPath),
 		DirMode:   0750,
 	}
 
