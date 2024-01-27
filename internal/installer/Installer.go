@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/begris-net/qtoolbox/internal/log"
 	"github.com/imroc/req/v3"
-	"github.com/moqsien/xtractr"
+	"golift.io/xtractr"
 	"os"
 	"path"
 	"path/filepath"

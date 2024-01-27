@@ -11,9 +11,9 @@ require (
 	github.com/imroc/req/v3 v3.42.3
 	github.com/mariomac/gostream v0.8.1
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/moqsien/xtractr v0.0.2
 	github.com/pterm/pterm v0.12.73
 	github.com/spf13/cobra v1.7.0
+	golift.io/xtractr v0.2.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -21,12 +21,12 @@ require (
 	atomicgo.dev/cursor v0.2.0 // indirect
 	atomicgo.dev/keyboard v0.2.9 // indirect
 	atomicgo.dev/schedule v0.1.0 // indirect
-	github.com/alexmullins/zip v0.0.0-20180717182244-4affb64b04d0 // indirect
 	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
-	github.com/bodgit/sevenzip v1.4.2 // indirect
+	github.com/bodgit/sevenzip v1.4.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
+	github.com/connesc/cipherio v0.2.1 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
@@ -35,7 +35,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/kdomanski/iso9660 v0.3.5 // indirect
+	github.com/kdomanski/iso9660 v0.3.3 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect

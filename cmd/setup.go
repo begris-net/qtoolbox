@@ -24,6 +24,8 @@ var initCmd = &cobra.Command{
 	Long: `Prepares and installs the qtoolbox enviroment folder
 and adds the toolbox command to your system PATH.`,
 	Run: setup,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	},
 }
 
 func setup(cmd *cobra.Command, args []string) {
