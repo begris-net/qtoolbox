@@ -60,6 +60,10 @@ func (d *CandidateDownload) CheckedDownload(destination string) (*req.Response, 
 	// files may be nil, but will contain any files written (even with an error).
 	extractSize, extractedFiles, processedArchives, err := x.Extract()
 
+	if err != nil {
+		log.Logger.Warn("Error during extraction", log.Logger.Args("archive", candidateArchivePath, "installPath", d.InstallPath, "downloadPath", d.DownloadPath, "err", err))
+	}
+
 	if errors.Is(err, xtractr.ErrUnknownArchiveType) {
 		log.Logger.Debug("Assuming the download was not compressed and is an executable")
 		// create candidate directory, as it was not created by the extraction process
