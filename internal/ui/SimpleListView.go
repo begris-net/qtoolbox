@@ -19,6 +19,20 @@ type ViewElement struct {
 	Default   bool
 }
 
+func (e ViewElement) isInstalled() string {
+	if e.Installed {
+		return "*"
+	}
+	return " "
+}
+
+func (e ViewElement) isDefault() string {
+	if e.Default {
+		return ">"
+	}
+	return " "
+}
+
 const (
 	min_row_size    = 15
 	four_row_break  = min_row_size * 3
@@ -74,7 +88,7 @@ func (v *ViewItem) renderHeader() string {
 }
 
 func (e ViewElement) renderViewElement() string {
-	return fmt.Sprintf(" %s %s %-15s", " ", " ", e.Name)
+	return fmt.Sprintf(" %s %s %-15s", e.isDefault(), e.isInstalled(), e.Name)
 }
 
 func (v *ViewItem) renderFooter() string {
