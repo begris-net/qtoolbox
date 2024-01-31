@@ -99,8 +99,26 @@ func installCandidate(cmd *cobra.Command, args []string) {
 		log.Logger.Fatal("Error get current configuration.", log.Logger.Args("err", err))
 	}
 
-	download.CheckedDownload(currentConfig.GetCandidateCachePath())
+	_, err = download.CheckedDownload(currentConfig.GetCandidateCachePath())
+	if err != nil {
+		log.Logger.Error("Error during candidate installation.", log.Logger.Args("err", err))
+		return
+	}
 
+	if !gostream.Of(candidateVersions...).AnyMatch(func(t candidate.Candidate) bool {
+		return t.Default
+	}) {
+		log.Logger.Info("Setting default")
+		selectedCandidate.MakeDefault()
+	} else {
+		if !selectedCandidate.Default {
+			interactiveConfirm := pterm.DefaultInteractiveConfirm
+			result, _ := interactiveConfirm.WithDefaultValue(true).Show(fmt.Sprintf("Do you want %s %s to be set as default?", selectedCandidate.Provider.Product, selectedCandidate.Version.Original()))
+			if result {
+				selectedCandidate.MakeDefault()
+			}
+		}
+	}
 }
 
 func validCandidateVersions(candidateName string, toComplete string) ([]string, cobra.ShellCompDirective) {
