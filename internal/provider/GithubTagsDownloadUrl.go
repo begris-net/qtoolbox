@@ -94,6 +94,7 @@ func (d *GitHubTagsDownloadUrl) ListReleases(multipleProviders bool, provider ca
 				Provider: provider,
 			}
 			candidate.DisplayName = renderDisplayName(multipleProviders, candidate)
+			candidate.GetCandidateStatus()
 			candidates = append(candidates, candidate)
 		} else {
 			log.Logger.Warn(fmt.Sprintf("Skipping invalid version %s releases from provider %s.", release.GetName(), provider.ProviderRepoId))

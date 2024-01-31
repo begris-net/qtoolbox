@@ -63,7 +63,6 @@ func list(cmd *cobra.Command, args []string) {
 	}
 
 	if hasCandidate {
-
 		candidateDescription, candidateVersions, hasMultipleProviderIds := repositoryConfig.ListCandidateVersions(CandidateName)
 
 		if hasMultipleProviderIds {
@@ -84,8 +83,8 @@ func list(cmd *cobra.Command, args []string) {
 				}), func(t candidate.Candidate) gostream.Stream[ui.ViewElement] {
 					return gostream.Of(ui.ViewElement{
 						Name:      t.DisplayName,
-						Installed: false,
-						Default:   false,
+						Installed: t.Installed,
+						Default:   t.Default,
 					})
 				}).ToSlice()).Show()
 		} else {
@@ -105,13 +104,11 @@ func list(cmd *cobra.Command, args []string) {
 				}), func(t candidate.Candidate) gostream.Stream[ui.ViewElement] {
 					return gostream.Of(ui.ViewElement{
 						Name:      t.DisplayName,
-						Installed: false,
-						Default:   false,
+						Installed: t.Installed,
+						Default:   t.Default,
 					})
 				}).ToSlice()).Show()
-
 		}
-
 	} else {
 		// show all candidate descriptions
 		// TODO need some fancy UI stuff here - scrollable view

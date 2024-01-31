@@ -103,6 +103,7 @@ func (d *MavenRelease) ListReleases(multipleProviders bool, provider candidate.C
 				Provider: provider,
 			}
 			candidate.DisplayName = renderDisplayName(multipleProviders, candidate)
+			candidate.GetCandidateStatus()
 			candidates = append(candidates, candidate)
 		})
 

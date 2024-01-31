@@ -51,6 +51,17 @@ func (c Candidate) GetCandidateInstallationDir() string {
 	return path.Join(c.Provider.GetCandidateInstallationBasePath(), c.DisplayName)
 }
 
+func (c *Candidate) GetCandidateStatus() {
+	stat, err := os.Stat(c.GetCandidateInstallationDir())
+	if err == nil && stat.IsDir() {
+		c.Installed = true
+		currentLink, err2 := os.Readlink(c.GetCurrentCandidate())
+		if err2 == nil {
+			c.Default = path.Base(currentLink) == stat.Name()
+		}
+	}
+}
+
 func (c Candidate) Show() {
 	println(util.OrElse(c.DisplayName, c.Version.Original()))
 }
