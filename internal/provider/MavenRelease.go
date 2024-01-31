@@ -132,7 +132,7 @@ func (d *MavenRelease) Download(installCandidate candidate.Candidate) (*installe
 		Candidate:    installCandidate,
 		DownloadUrl:  nil,
 		DownloadPath: d.candidatesDownloadPath,
-		InstallPath:  installCandidate.GetCandidateInstallationDir(d.candidatesBathPath),
+		InstallPath:  installCandidate.GetCandidateInstallationDir(),
 		FileMode:     platformHandler.GetSetting(platform.FileMode),
 	}, nil
 }

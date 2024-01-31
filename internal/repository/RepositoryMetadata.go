@@ -13,6 +13,7 @@ import (
 )
 
 var repository *Repository
+var candidateInstallationBasePath string
 
 func initRepository(metadataPath string) *Repository {
 	return LoadRepositoryConfig(metadataPath)
@@ -25,6 +26,7 @@ func GetRepository() *Repository {
 			panic(err)
 		}
 		repository = initRepository(currentConfig.GetRepositoryConfigPath())
+		candidateInstallationBasePath = currentConfig.GetCandidatesBathPath()
 	}
 	return repository
 }
@@ -64,15 +66,16 @@ func (repository *Repository) FetchCandidateProvider(candidateName string) (
 
 	mapCandidate := func(repoId string, t ProviderInfo) candidate.CandidateProvider {
 		return candidate.CandidateProvider{
-			ProviderRepoId:      repoId,
-			Product:             candidateName,
-			Id:                  t.ID,
-			Vendor:              t.Vendor,
-			Type:                t.Type,
-			Endpoint:            t.Endpoint,
-			PreRelease:          t.PreReleases,
-			VersionCleanupRegex: regexp.MustCompile(t.VersionCleanup),
-			Settings:            t.Settings,
+			ProviderRepoId:       repoId,
+			Product:              candidateName,
+			Id:                   t.ID,
+			Vendor:               t.Vendor,
+			Type:                 t.Type,
+			Endpoint:             t.Endpoint,
+			PreRelease:           t.PreReleases,
+			VersionCleanupRegex:  regexp.MustCompile(t.VersionCleanup),
+			Settings:             t.Settings,
+			InstallationBasePath: candidateInstallationBasePath,
 		}
 	}
 

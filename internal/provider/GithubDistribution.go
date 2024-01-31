@@ -151,7 +151,7 @@ func (d *GithubDistribution) Download(installCandidate candidate.Candidate) (*in
 			Candidate:    installCandidate,
 			DownloadUrl:  downloadUrl,
 			DownloadPath: d.candidatesDownloadPath,
-			InstallPath:  installCandidate.GetCandidateInstallationDir(d.candidatesBathPath),
+			InstallPath:  installCandidate.GetCandidateInstallationDir(),
 			FileMode:     platformHandler.GetSetting(platform.FileMode),
 		}
 	}, func() {

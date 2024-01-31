@@ -129,7 +129,7 @@ func (d *GitHubTagsDownloadUrl) Download(installCandidate candidate.Candidate) (
 		Candidate:    installCandidate,
 		DownloadUrl:  downloadUrl,
 		DownloadPath: d.candidatesDownloadPath,
-		InstallPath:  installCandidate.GetCandidateInstallationDir(d.candidatesBathPath),
+		InstallPath:  installCandidate.GetCandidateInstallationDir(),
 		FileMode:     platformHandler.GetSetting(platform.FileMode),
 	}, nil
 }
