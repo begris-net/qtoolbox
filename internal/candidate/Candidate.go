@@ -51,6 +51,18 @@ func (c Candidate) GetCandidateInstallationDir() string {
 	return path.Join(c.Provider.GetCandidateInstallationBasePath(), c.DisplayName)
 }
 
+func (c Candidate) GetCurrentCandidate() string {
+	return path.Join(c.Provider.GetCandidateInstallationBasePath(), "current")
+}
+
+func (c Candidate) MakeDefault() error {
+	_, err := os.Stat(c.GetCurrentCandidate())
+	if err == nil {
+		os.Remove(c.GetCurrentCandidate())
+	}
+	return os.Symlink(c.GetCandidateInstallationDir(), c.GetCurrentCandidate())
+}
+
 func (c *Candidate) GetCandidateStatus() {
 	stat, err := os.Stat(c.GetCandidateInstallationDir())
 	if err == nil && stat.IsDir() {
