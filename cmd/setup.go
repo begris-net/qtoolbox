@@ -9,6 +9,7 @@ import (
 	"github.com/begris-net/qtoolbox/internal/config/defaults"
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -44,6 +45,45 @@ func setup(cmd *cobra.Command, args []string) {
 
 	dirs, _ := defaults.Default.ReadDir(".")
 	extractInstallation(dirs, homeDir, ".", 0)
+	qToolboxBinary := filepath.Join(homeDir, config.QToolboxDirectory, "bin", filepath.Base(os.Args[0]))
+	installQtoolbox(os.Args[0], qToolboxBinary)
+}
+
+func installQtoolbox(src string, dst string) error {
+	err := copyBinary(src, dst)
+	if err != nil {
+		return err
+	}
+	permExec := os.FileMode(0750)
+	err = os.Chmod(dst, permExec)
+	if err != nil {
+		return err
+	}
+
+	os.Remove(src)
+	return nil
+}
+
+func copyBinary(src string, dst string) error {
+	if _, err := os.Stat(dst); os.IsNotExist(err) {
+		in, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+
+		out, err := os.Create(dst)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+
+		_, err = io.Copy(out, in)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func extractInstallation(dirs []fs.DirEntry, homeDir string, parent string, indent int) {
