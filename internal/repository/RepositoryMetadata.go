@@ -57,7 +57,7 @@ func (repository *Repository) FetchCandidateProvider(candidateName string) (
 
 	candidateInfo := repository.findCandidate(candidateName)
 
-	cadidateDescription := candidate.CandidateDescription{
+	candidateDescription := candidate.CandidateDescription{
 		Name:              candidateInfo.Name,
 		DisplayName:       &candidateInfo.DisplayName,
 		Description:       &candidateInfo.Description,
@@ -91,7 +91,7 @@ func (repository *Repository) FetchCandidateProvider(candidateName string) (
 		}))
 	hasMultipleProviderIds := uniqueProviderIds.Count() > 1
 
-	return cadidateDescription, candidateProvider, hasMultipleProviderIds
+	return candidateDescription, candidateProvider, hasMultipleProviderIds
 }
 
 func (repository *Repository) ListCandidateVersions(candidateName string) (
