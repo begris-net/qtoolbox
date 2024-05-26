@@ -158,6 +158,8 @@ candidates:
         id: maven
         type: MavenRelease
         endpoint: org.apache.maven:apache-maven
+        settings:
+          archive: apache-maven-{{.Version}}-bin.tar.gz
   - name: groovy
     display-name: Groovy
     description: |

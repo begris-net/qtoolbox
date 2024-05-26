@@ -15,6 +15,7 @@ const (
 	OS_Mapping        = "os-mapping"
 	Arch_Mapping      = "arch-mapping"
 	Extention_Mapping = "ext-mapping"
+	Archive           = "archive"
 )
 
 type PlatformHandler struct {
