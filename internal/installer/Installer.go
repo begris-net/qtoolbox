@@ -73,8 +73,11 @@ func (d *CandidateDownload) CheckedDownload(destination string) (*req.Response, 
 		os.Rename(candidateArchivePath, candidateExecutable)
 		if d.FileMode != "" {
 			mode, _ := strconv.ParseUint(d.FileMode, 10, 32)
+			log.Logger.Debug("Setting file mode for executable", log.Logger.Args("file-mode", d.FileMode, "mode", mode))
 			os.Chmod(candidateExecutable, os.FileMode(mode))
 		}
+		// reset error, as this one was expected
+		err = nil
 	} else if err != nil && errors.Is(err, xtractr.ErrUnknownArchiveType) || extractedFiles == nil {
 		log.Logger.Error(fmt.Sprintf("Installation of candidate %s failed.", d.Candidate.DisplayName), log.Logger.Args("err", err.Error()))
 		if hasPreviousInstallation {
