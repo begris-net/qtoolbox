@@ -36,10 +36,10 @@ Java has a custom list view with vendor-specific details.`,
 	Aliases:           []string{"i"},
 	Args:              cobra.RangeArgs(1, 2),
 	Run:               installCandidate,
-	ValidArgsFunction: validInstallCandidates,
+	ValidArgsFunction: validInstallCandidateVersions,
 }
 
-func validInstallCandidates(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func validInstallCandidateVersions(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	cmd.Flags().Parse(args)
 	cleanedArgs := cmd.Flags().Args()
 
