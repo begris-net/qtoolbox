@@ -11,8 +11,10 @@ import (
 	"github.com/begris-net/qtoolbox/internal/provider/platform"
 	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/begris-net/qtoolbox/internal/util"
+	"html/template"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -66,13 +68,17 @@ func (d *MavenRelease) UpdateProviderSettings(settings types.ProviderSettings) {
 
 func (d *MavenRelease) getArtifactBaseUrl(provider candidate.CandidateProvider) *url.URL {
 	gav := strings.Split(provider.Endpoint, ":")
-	gav = append(strings.Split(gav[0], "."), gav[1], mavenMetadata)
+	gav = append(strings.Split(gav[0], "."), gav[1])
 	return d.baseUrl.JoinPath(gav...)
+}
+
+func (d *MavenRelease) getArtifactMetadataUrl(provider candidate.CandidateProvider) *url.URL {
+	return d.getArtifactBaseUrl(provider).JoinPath(mavenMetadata)
 }
 
 func (d *MavenRelease) ListReleases(multipleProviders bool, provider candidate.CandidateProvider) []candidate.Candidate {
 	refresh := func() *Metadata {
-		resp, err := http.Get(d.getArtifactBaseUrl(provider).String())
+		resp, err := http.Get(d.getArtifactMetadataUrl(provider).String())
 		if err != nil {
 			panic(err)
 		}
@@ -111,18 +117,53 @@ func (d *MavenRelease) ListReleases(multipleProviders bool, provider candidate.C
 }
 
 func (d *MavenRelease) Download(installCandidate candidate.Candidate) (*installer.CandidateDownload, error) {
-
-
+	os := runtime.GOOS
+	arch := runtime.GOARCH
 
 	platformHandler := platform.NewPlatformHandler(installCandidate.Provider.Settings)
 
+	log.Logger.Debug(fmt.Sprintf("Going to install version %s of candidate %s.", installCandidate.Version.Original(), installCandidate.Provider.Product))
+	log.Logger.Trace("System detection for download determination", log.Logger.Args("os", runtime.GOOS, "arch", runtime.GOARCH, "GOROOT", runtime.GOROOT()))
+
+	properties := d.applyProviderMappings(platformHandler, templateProperties{
+		OS:      os,
+		Arch:    arch,
+		Version: installCandidate.Version.Original(),
+	})
+
+	archiveName, err := d.renderArchiveTemplate(platformHandler.GetSetting(platform.Archive), properties)
+	if err != nil {
+		log.Logger.Error(err.Error(), log.Logger.Args("archiveTemplate", platformHandler.GetSetting(platform.Archive)))
+		return nil, err
+	}
+
 	return &installer.CandidateDownload{
 		Candidate:    installCandidate,
-		DownloadUrl:  nil,
+		DownloadUrl:  d.getArtifactBaseUrl(installCandidate.Provider).JoinPath(installCandidate.Version.Original(), archiveName),
 		DownloadPath: d.candidatesDownloadPath,
 		InstallPath:  installCandidate.GetCandidateInstallationDir(),
 		FileMode:     platformHandler.GetSetting(platform.FileMode),
 	}, nil
+}
+
+func (d *MavenRelease) applyProviderMappings(ph *platform.PlatformHandler, properties templateProperties) templateProperties {
+	properties.OS = ph.MapOS(properties.OS)
+	properties.Arch = ph.MapArchitecture(properties.Arch)
+	properties.OSArchiveExt = ph.MapExtension(properties.OS)
+	return properties
+}
+
+func (d *MavenRelease) renderArchiveTemplate(archiveTemplate string, properties templateProperties) (string, error) {
+	downloadArchiveTemplate, err := template.New("endpoint").Parse(archiveTemplate)
+	if err != nil {
+		return "", err
+	}
+	var archiveBuilder strings.Builder
+	err = downloadArchiveTemplate.Execute(&archiveBuilder, properties)
+	if err != nil {
+		return "", err
+	}
+	return archiveBuilder.String(), err
 }
 
 type Metadata struct {
