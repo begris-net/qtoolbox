@@ -56,3 +56,7 @@ func Distributor(provider types.ProviderType) Distribution {
 	}
 	return distribution
 }
+
+type templateProperties struct {
+	OS, Arch, Version, OSArchiveExt string
+}

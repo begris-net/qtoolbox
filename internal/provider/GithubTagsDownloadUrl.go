@@ -160,7 +160,3 @@ func (d *GitHubTagsDownloadUrl) renderUrlTemplate(candidate candidate.Candidate,
 	url, err := url.Parse(urlBuilder.String())
 	return url, err
 }
-
-type templateProperties struct {
-	OS, Arch, Version, OSArchiveExt string
-}
