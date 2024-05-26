@@ -214,9 +214,9 @@ candidates:
         endpoint: kubernetes/kubernetes # org-id/repo
         version-cleanup: ^[[:alpha:]]+\s #regex to clean up version string, currently only supported by github based providers
         settings:
-          url: https://dl.k8s.io/release/{{.Version}}/bin/{{.OS}}/{{.Arch}}/kubectl{{.OSBinaryExt}} # {{.OSBinaryExt}} includes the `.` dot before the extension
-          file-mode: 0750 # only valid if a single uncompressed file is loaded
-          binary-ext-mapping:
+          url: https://dl.k8s.io/release/{{.Version}}/bin/{{.OS}}/{{.Arch}}/kubectl{{.OSArchiveExt}} # {{.OSArchiveExt}} includes the `.` dot before the extension
+          file-mode: "0750" # only valid if a single uncompressed file is loaded
+          ext-mapping:
             windows: .exe # if an extension other than the default is required
             #linux:  # if an extension other than the default is required
             #darwin: # if an extension other than the default is required
