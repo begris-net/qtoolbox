@@ -116,7 +116,6 @@ func list(cmd *cobra.Command, args []string) {
 			c.Show()
 		}
 	}
-
 }
 
 func init() {
