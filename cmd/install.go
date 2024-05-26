@@ -15,6 +15,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
+	"os"
 	"strings"
 )
 
@@ -99,10 +100,10 @@ func installCandidate(cmd *cobra.Command, args []string) {
 		log.Logger.Fatal("Error get current configuration.", log.Logger.Args("err", err))
 	}
 
-	_, err = download.CheckedDownload(currentConfig.GetCandidateCachePath())
-	if err != nil {
-		log.Logger.Error("Error during candidate installation.", log.Logger.Args("err", err))
-		return
+	_, checkedDownloadError := download.CheckedDownload(currentConfig.GetCandidateCachePath())
+	if checkedDownloadError != nil {
+		log.Logger.Error("Error during candidate installation.", log.Logger.Args("err", checkedDownloadError))
+		os.Exit(1)
 	}
 
 	if !gostream.Of(candidateVersions...).AnyMatch(func(t candidate.Candidate) bool {
