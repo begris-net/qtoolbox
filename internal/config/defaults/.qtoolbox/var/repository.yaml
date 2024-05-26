@@ -101,7 +101,7 @@ candidates:
             arm64: aarch64
             amd64: x64
           ext-mapping:
-            windows: -jdk.tar.gz # if an extension other than the default is required
+            windows: -jdk.zip # if an extension other than the default is required
             linux: .tar.gz # if an extension other than the default is required
             darwin: .tar.gz # if an extension other than the default is required
         # https://corretto.aws/downloads/resources/21.0.1.12.1/amazon-corretto-21.0.1.12.1-linux-aarch64.tar.gz  << linux - arm64
@@ -122,7 +122,7 @@ candidates:
             arm64: aarch64
             amd64: x64
           ext-mapping:
-            windows: -jdk.tar.gz # if an extension other than the default is required
+            windows: -jdk.zip # if an extension other than the default is required
             linux: .tar.gz # if an extension other than the default is required
             darwin: .tar.gz # if an extension other than the default is required
       amazon-corretto-11:
@@ -138,7 +138,7 @@ candidates:
             arm64: aarch64
             amd64: x64
           ext-mapping:
-            windows: -jdk.tar.gz # if an extension other than the default is required
+            windows: -jdk.zip # if an extension other than the default is required
             linux: .tar.gz # if an extension other than the default is required
             darwin: .tar.gz # if an extension other than the default is required
       graal-17:
