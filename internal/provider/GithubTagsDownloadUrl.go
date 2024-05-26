@@ -21,13 +21,6 @@ import (
 	"time"
 )
 
-const (
-	Url_Template      = "url"
-	OS_Mapping        = "os-mapping"
-	Arch_Mapping      = "arch-mapping"
-	Extention_Mapping = "ext-mapping"
-)
-
 type GitHubTagsDownloadUrl struct {
 	pageSize               int
 	cacheTtl               time.Duration
@@ -155,7 +148,7 @@ func (d *GitHubTagsDownloadUrl) applyProviderMappings(ph *platform.PlatformHandl
 }
 
 func (d *GitHubTagsDownloadUrl) renderUrlTemplate(candidate candidate.Candidate, properties templateProperties) (*url.URL, error) {
-	downloadUrlTemplate, err := template.New("endpoint").Parse(reflect.ValueOf(candidate.Provider.Settings[Url_Template]).String())
+	downloadUrlTemplate, err := template.New("endpoint").Parse(reflect.ValueOf(candidate.Provider.Settings[platform.Url_Template]).String())
 	if err != nil {
 		return nil, err
 	}
