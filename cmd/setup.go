@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/begris-net/qtoolbox/internal/config"
 	"github.com/begris-net/qtoolbox/internal/config/defaults"
+	"github.com/begris-net/qtoolbox/internal/log"
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"io"
@@ -46,7 +47,13 @@ func setup(cmd *cobra.Command, args []string) {
 	dirs, _ := defaults.Default.ReadDir(".")
 	extractInstallation(dirs, homeDir, ".", 0)
 	qToolboxBinary := filepath.Join(homeDir, config.QToolboxDirectory, "bin", filepath.Base(os.Args[0]))
-	installQtoolbox(os.Args[0], qToolboxBinary)
+	log.Logger.Info("Installing qtoolbox binary...")
+	err := installQtoolbox(os.Args[0], qToolboxBinary)
+	if err != nil {
+		log.Logger.Fatal("Error installing qtoolbox binary.", log.Logger.Args("err", err))
+	}
+	log.Logger.Info("Integrating qtoolbox in shell...")
+	log.Logger.Warn("not-yet-implemented - please call", log.Logger.Args("cmd", "source ~/.qtoolbox/bin/qtoolbox-init.sh"))
 }
 
 func installQtoolbox(src string, dst string) error {
@@ -59,29 +66,26 @@ func installQtoolbox(src string, dst string) error {
 	if err != nil {
 		return err
 	}
-
-	os.Remove(src)
 	return nil
 }
 
 func copyBinary(src string, dst string) error {
-	if _, err := os.Stat(dst); os.IsNotExist(err) {
-		in, err := os.Open(src)
-		if err != nil {
-			return err
-		}
-		defer in.Close()
+	log.Logger.Info("Copying qtoolbox binary.", log.Logger.Args("src", src, "dst", dst))
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
 
-		out, err := os.Create(dst)
-		if err != nil {
-			return err
-		}
-		defer out.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
 
-		_, err = io.Copy(out, in)
-		if err != nil {
-			return err
-		}
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
 	}
 	return nil
 }
