@@ -120,6 +120,7 @@ func installCandidate(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
+	fmt.Fprintf(os.Stdout, "%s %s %s", "install", selectedCandidate.Provider.Product, selectedCandidate.Version.String())
 }
 
 func validCandidateVersions(candidateName string, toComplete string) ([]string, cobra.ShellCompDirective) {
