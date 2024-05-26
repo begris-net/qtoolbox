@@ -63,6 +63,7 @@ candidates:
       Java software-platform family. Java SE defines a wide range of general-purpose
       APIs – such as Java APIs for the Java Class Library – and also includes the Java
       Language Specification and the Java Virtual Machine Specification.
+    export-path: bin # if a subpath needs to be exported
     default-provider-id: zulu # only required, if multiple provider ids are present. Mainly to determine the latest version during the install command without a specific version
     provider:
       zulu:
@@ -153,6 +154,7 @@ candidates:
       Apache Maven is a software project management and comprehension tool. Based on
       the concept of a project object model (POM), Maven can manage a project's build,
       reporting and documentation from a central piece of information.
+    export-path: bin # if a subpath needs to be exported
     provider:
       maven:
         id: maven
@@ -172,6 +174,7 @@ candidates:
       application powerful features, including scripting capabilities, Domain-Specific
       Language authoring, runtime and compile-time meta-programming and functional
       programming.
+    export-path: bin
     provider:
       groovy:
         id: groovy # if id is equal to the candidate name, it will be omitted

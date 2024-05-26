@@ -17,6 +17,7 @@ type Candidate struct {
 	DisplayName string
 	Installed   bool
 	Default     bool
+	ExportPath  *string
 }
 
 type CandidateProvider struct {

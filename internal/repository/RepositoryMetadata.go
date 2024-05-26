@@ -55,7 +55,7 @@ func (repository *Repository) FetchCandidateProvider(candidateName string) (
 	// has multiple provider Ids (vendors)
 	bool) {
 
-	candidateInfo := repository.findCandidate(candidateName)
+	candidateInfo := repository.FindCandidate(candidateName)
 
 	candidateDescription := candidate.CandidateDescription{
 		Name:              candidateInfo.Name,
@@ -99,7 +99,6 @@ func (repository *Repository) ListCandidateVersions(candidateName string) (
 	[]candidate.Candidate,
 	// has multiple provider Ids (vendors)
 	bool) {
-
 	cadidateDescription, candidateProviders, hasMultipleProviderIds := repository.FetchCandidateProvider(candidateName)
 
 	if log.Logger.CanPrint(pterm.LogLevelDebug) {
@@ -117,7 +116,7 @@ func (repository *Repository) ListCandidateVersions(candidateName string) (
 	return cadidateDescription, candidates.ToSlice(), hasMultipleProviderIds
 }
 
-func (repository *Repository) findCandidate(candidateName string) CandidateInfo {
+func (repository *Repository) FindCandidate(candidateName string) CandidateInfo {
 	slice := stream.OfSlice(repository.Candidates)
 	first, _ := slice.Filter(func(v CandidateInfo) bool {
 		return v.Name == candidateName

@@ -15,6 +15,7 @@ type CandidateInfo struct {
 	Name              string                  `yaml:"name"`
 	DisplayName       string                  `yaml:"display-name,omitempty"`
 	Description       string                  `yaml:"description,omitempty"`
+	ExportPath        *string                 `yaml:"export-path,omitempty"`
 	DefaultProviderId string                  `yaml:"default-provider-id,omitempty"`
 	Provider          map[string]ProviderInfo `yaml:"provider,flow"`
 }
