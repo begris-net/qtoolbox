@@ -111,21 +111,8 @@ func (d *MavenRelease) ListReleases(multipleProviders bool, provider candidate.C
 }
 
 func (d *MavenRelease) Download(installCandidate candidate.Candidate) (*installer.CandidateDownload, error) {
-	//releases := d.getCachedReleases(installCandidate.Provider)
-	//log.Logger.Info(fmt.Sprintf("Fetched %d releases from provider %s.", len(releases), installCandidate.Provider.ProviderRepoId))
 
-	//os := runtime.GOOS
-	//arch := runtime.GOARCH
 
-	//log.Logger.Debug(fmt.Sprintf("Going to install version %s of candidate %s.", installCandidate.Version.Original(), installCandidate.Provider.Product))
-	//log.Logger.Trace("System detection for download determination", log.Logger.Args("os", runtime.GOOS, "arch", runtime.GOARCH, "GOROOT", runtime.GOROOT()))
-	//
-	//platformHandler := platform.NewPlatformHandler(installCandidate.Provider.Settings)
-	//properties := d.applyProviderMappings(platformHandler, templateProperties{
-	//	OS:      os,
-	//	Arch:    arch,
-	//	Version: installCandidate.Version.Original(),
-	//})
 
 	platformHandler := platform.NewPlatformHandler(installCandidate.Provider.Settings)
 

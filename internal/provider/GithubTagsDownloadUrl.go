@@ -129,18 +129,6 @@ func (d *GitHubTagsDownloadUrl) Download(installCandidate candidate.Candidate) (
 }
 
 func (d *GitHubTagsDownloadUrl) applyProviderMappings(ph *platform.PlatformHandler, properties templateProperties) templateProperties {
-	//if provider.Settings[OS_Mapping] != nil {
-	//	log.Logger.Debug("OS mapping:", log.Logger.Args("mappingTable", OS_Mapping, "mappings", provider.Settings[OS_Mapping]))
-	//	properties.OS = MapOriginalValue(provider.Settings[OS_Mapping], properties.OS)
-	//}
-	//if provider.Settings[Arch_Mapping] != nil {
-	//	log.Logger.Debug("Arch mapping:", log.Logger.Args("mappingTable", Arch_Mapping, "mappings", provider.Settings[Arch_Mapping]))
-	//	properties.Arch = MapOriginalValue(provider.Settings[Arch_Mapping], properties.Arch)
-	//}
-	//if provider.Settings[Extention_Mapping] != nil {
-	//	log.Logger.Debug("Extention mapping:", log.Logger.Args("mappingTable", Extention_Mapping, "mappings", provider.Settings[Extention_Mapping]))
-	//	properties.OSArchiveExt = MapOriginalValue(provider.Settings[Extention_Mapping], properties.OS)
-	//}
 	properties.OS = ph.MapOS(properties.OS)
 	properties.Arch = ph.MapArchitecture(properties.Arch)
 	properties.OSArchiveExt = ph.MapExtension(properties.OS)
