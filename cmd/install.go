@@ -113,6 +113,7 @@ func installCandidate(cmd *cobra.Command, args []string) {
 		selectedCandidate.MakeDefault()
 	} else {
 		if !selectedCandidate.Default {
+			pterm.SetDefaultOutput(os.Stderr)
 			interactiveConfirm := pterm.DefaultInteractiveConfirm
 			result, _ := interactiveConfirm.WithDefaultValue(true).Show(fmt.Sprintf("Do you want %s %s to be set as default?", selectedCandidate.Provider.Product, selectedCandidate.Version.Original()))
 			if result {
