@@ -60,7 +60,7 @@ func (d *CandidateDownload) CheckedDownload(destination string) (*req.Response, 
 	// files may be nil, but will contain any files written (even with an error).
 	extractSize, extractedFiles, processedArchives, err := x.Extract()
 
-	if err != nil {
+	if err != nil && !errors.Is(err, xtractr.ErrUnknownArchiveType) {
 		log.Logger.Warn("Error during extraction", log.Logger.Args("archive", candidateArchivePath, "installPath", d.InstallPath, "downloadPath", d.DownloadPath, "err", err))
 	}
 

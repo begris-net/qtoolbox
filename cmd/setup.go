@@ -32,19 +32,20 @@ and adds the toolbox command to your system PATH.`,
 
 func setup(cmd *cobra.Command, args []string) {
 	homeDir, _ := homedir.Dir()
-	fmt.Printf("%v", homeDir)
+	log.Logger.Info("Creating setup in", log.Logger.Args("directory", fmt.Sprintf("%v", homeDir)))
 
 	if _, err := os.Stat(filepath.Join(homeDir, config.QToolboxDirectory)); err == nil {
-		print("Found existing config")
+		msg := "Found existing config"
 		if !force {
-			println("... aborting.")
+			log.Logger.Error(msg + "... aborting.")
 			os.Exit(1)
 		} else {
-			println("... Overriding current configuration.")
+			log.Logger.Warn(msg + "... Overriding current configuration.")
 		}
 	}
 
 	dirs, _ := defaults.Default.ReadDir(".")
+	log.Logger.Info("Extracting qtoolbox installation.")
 	extractInstallation(dirs, homeDir, ".", 0)
 	qToolboxBinary := filepath.Join(homeDir, config.QToolboxDirectory, "bin", filepath.Base(os.Args[0]))
 	log.Logger.Info("Installing qtoolbox binary...")
@@ -99,7 +100,7 @@ func extractInstallation(dirs []fs.DirEntry, homeDir string, parent string, inde
 		panic(err)
 	}
 	for _, entry := range dirs {
-		println(strings.Repeat(" ", indent*2), entry.Name())
+		log.Logger.Trace(fmt.Sprint(strings.Repeat(" ", indent*2), entry.Name()))
 		if entry.IsDir() {
 			subpath := path.Join(parent, entry.Name())
 			childs, err := defaults.Default.ReadDir(subpath)
