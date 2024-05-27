@@ -17,7 +17,7 @@ function __qtoolbox_pathadd {
     PATH=$1${PATH//:$1:/:}
 }
 
-__pathadd $QTOOLBOX_BIN_DIR
+__qtoolbox_pathadd $QTOOLBOX_BIN_DIR
 source $COMPLETION_FILE
 alias qtb=qtoolbox tb=qtoolbox
 
@@ -28,7 +28,7 @@ for candidate_name in $(find $QTOOLBOX_CANDIDATES_DIR -mindepth 1 -maxdepth 1 -t
 	candidate_dir="${QTOOLBOX_CANDIDATES_DIR}/${candidate_name}/current"
 	if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
         candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate_name")
-        __pathadd "$candidate_dir$candidate_bin"
+        __qtoolbox_pathadd "$candidate_dir$candidate_bin"
 	fi
 done
 unset candidate_name candidate_dir
@@ -60,7 +60,7 @@ function __qtoolbox_initialize_candidates() {
     	candidate_dir="${QTOOLBOX_CANDIDATES_DIR}/${candidate_name}/current"
     	if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
             candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate_name")
-            __pathadd "$candidate_dir$candidate_bin"
+            __qtoolbox_pathadd "$candidate_dir$candidate_bin"
     	fi
     done
 }
