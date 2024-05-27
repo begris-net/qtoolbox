@@ -89,6 +89,11 @@ function __qtoolbox_update_candidate_path() {
                 matched_path=${BASH_REMATCH[2]}
             fi
             export PATH=${PATH//${QTOOLBOX_CANDIDATES_DIR}\/${candidate}\/${matched_version}/${QTOOLBOX_CANDIDATES_DIR}\/${candidate}\/${version}${close_path}}
+        else
+            if [[ -n "$candidate_bin" ]]; then
+                candidate_dir="$candidate_dir/$candidate_bin"
+            fi
+            __qtoolbox_pathadd "$candidate_dir"
         fi
     fi
     export PATH
