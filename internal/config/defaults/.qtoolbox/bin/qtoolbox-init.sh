@@ -66,7 +66,7 @@ function __qtoolbox_initialize_candidates() {
 }
 
 function __qtoolbox_update_candidate_path() {
-    local candidate version candidate_dir close_path
+    local candidate version candidate_dir close_path candidate_bin
     candidate="$1"
     version="$2"
     candidate_dir="${QTOOLBOX_CANDIDATES_DIR}/${candidate}/${version}"
