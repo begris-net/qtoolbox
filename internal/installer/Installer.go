@@ -1,9 +1,12 @@
 package installer
 
 import (
+	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/begris-net/qtoolbox/internal/log"
+	extract "github.com/codeclysm/extract/v3"
 	"github.com/imroc/req/v3"
 	"golift.io/xtractr"
 	"os"
@@ -50,21 +53,38 @@ func (d *CandidateDownload) CheckedDownload(destination string) (*req.Response, 
 	}
 
 	candidateArchivePath := filepath.Join(destination, candidateArchive)
-	x := &xtractr.XFile{
-		FilePath:  candidateArchivePath,
-		OutputDir: filepath.FromSlash(d.InstallPath),
-		DirMode:   0750,
-	}
 
-	// size is how many bytes were written.
-	// files may be nil, but will contain any files written (even with an error).
-	extractSize, extractedFiles, processedArchives, err := x.Extract()
+	//x := &xtractr.XFile{
+	//	FilePath:  candidateArchivePath,
+	//	OutputDir: filepath.FromSlash(d.InstallPath),
+	//	DirMode:   0750,
+	//}
+	//
+	//// size is how many bytes were written.
+	//// files may be nil, but will contain any files written (even with an error).
+	//extractSize, extractedFiles, processedArchives, err := x.Extract()
+
+	data, err := os.Open(candidateArchivePath)
+	if err != nil {
+		log.Logger.Fatal("Error extracting candidate archive", log.Logger.Args("err", err))
+	}
+	defer data.Close()
+	reader := bufio.NewReader(data)
+	err = extract.Archive(context.TODO(), reader, filepath.FromSlash(d.InstallPath), nil)
+	var extractedFiles []string
+	var processedArchives []string
+	var extractSize int
+	if err == nil {
+		extractedFiles = make([]string, 1)
+		processedArchives = make([]string, 1)
+		extractSize = 0
+	}
 
 	if err != nil && !errors.Is(err, xtractr.ErrUnknownArchiveType) {
 		log.Logger.Warn("Error during extraction", log.Logger.Args("archive", candidateArchivePath, "installPath", d.InstallPath, "downloadPath", d.DownloadPath, "err", err))
 	}
 
-	if errors.Is(err, xtractr.ErrUnknownArchiveType) {
+	if errors.Is(err, xtractr.ErrUnknownArchiveType) || err != nil {
 		log.Logger.Debug("Assuming the download was not compressed and is an executable")
 		// create candidate directory, as it was not created by the extraction process
 		os.MkdirAll(d.InstallPath, 0750)
