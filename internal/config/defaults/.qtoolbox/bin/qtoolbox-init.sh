@@ -17,6 +17,12 @@ function __qtoolbox_pathadd {
     PATH=$1${PATH//:$1:/:}
 }
 
+function __qtoolbox_debug {
+    if [[ "$__QTOOLBOX_DEBUG" == "debug" ]]; then
+        echo "$@"
+    fi
+}
+
 __qtoolbox_pathadd $QTOOLBOX_BIN_DIR
 source $COMPLETION_FILE
 alias qtb=qtoolbox tb=qtoolbox
@@ -24,7 +30,7 @@ alias qtb=qtoolbox tb=qtoolbox
 QTOOLBOX_CANDIDATES_DIR="$QTOOLBOX_DIR/candidates"
 # init installed candidates
 for candidate_name in $(find $QTOOLBOX_CANDIDATES_DIR -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
-    echo "candidate: $candidate_name"
+    __qtoolbox_debug "candidate: $candidate_name"
 	candidate_dir="${QTOOLBOX_CANDIDATES_DIR}/${candidate_name}/current"
 	if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
         candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate_name")
@@ -36,7 +42,7 @@ export PATH
 
 function qtoolbox() {
     local ret args final_rc
-    echo "qtoolbox wrapper" >&2;
+    __qtoolbox_debug "qtoolbox wrapper" >&2;
     ret=$(command qtoolbox "$@")
     local final_rc=$?
     echo $ret
@@ -56,7 +62,7 @@ function __qtoolbox_initialize_candidates() {
     qtoolbox_candidates_dir=$1
 
     for candidate_name in $(find $qtoolbox_candidates_dir -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
-        echo "candidate: $candidate_name"
+        __qtoolbox_debug "candidate: $candidate_name"
     	candidate_dir="${QTOOLBOX_CANDIDATES_DIR}/${candidate_name}/current"
     	if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
             candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate_name")
@@ -70,7 +76,7 @@ function __qtoolbox_update_candidate_path() {
     candidate="$1"
     version="$2"
     candidate_dir="${QTOOLBOX_CANDIDATES_DIR}/${candidate}/${version}"
-    echo $candidate_dir
+    __qtoolbox_debug $candidate_dir
     if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
         candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate")
 
@@ -104,7 +110,7 @@ function __qtoolbox_set_candidate_home() {
 	candidate="$1"
 	version="$2"
 	upper_candidate=$(echo "$candidate" | tr '[:lower:]' '[:upper:]')
-	echo "${upper_candidate}_HOME=${QTOOLBOX_CANDIDATES_DIR}/${candidate}/${version}"
+	__qtoolbox_debug "${upper_candidate}_HOME=${QTOOLBOX_CANDIDATES_DIR}/${candidate}/${version}"
 	export "${upper_candidate}_HOME"="${QTOOLBOX_CANDIDATES_DIR}/${candidate}/${version}"
 }
 
