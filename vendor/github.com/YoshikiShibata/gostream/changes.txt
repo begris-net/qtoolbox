@@ -1,0 +1,68 @@
+2020/10/16 AveragingFloat64Collector is implemented
+2020/10/16 AveragingInt64Collector is implemented
+2020/10/15 Min() and Max() are implemented
+2020/10/15 Range() and RangeClose() are implemented
+2020/10/15 MaxByCollector and MinByCollector are implemented
+2020/10/15 ReducingCollector and ReducingToOptionalCollector are implemented.
+2020/10/15 CountingCollector is implmeneted
+2020/10/14 SummingCollector is implemented
+2020/10/13 Identity() function is added
+2020/10/12 SummarizingCollector is implemented
+2020/10/11 Sum() function is implemented
+2020/10/10 FindAny() method is implemented
+2020/10/06 FileLines() function is added.
+2020/09/26 Reduce() function supports parallel
+2020/09/26 NoneMatch() method supports parallel
+2020/09/26 AllMatch() method supports parallel
+2020/09/25 AnyMatch() method supports parallel
+2020/09/24 Count() method supports parallel
+2020/09/23 Max() method supports parallel
+2020/09/23 Min() method supports parallel
+2020/09/22 ReduceToOptional() method supports parallel
+2020/09/22 Reduce() method supports parallel.
+2020/09/20 Fix Distinct() and Prallel()
+2020/09/16 Peek() method supports parallel.
+2020/09/15 Distinct() function supports parallel.
+2020/09/13 Map() function supports parallel.
+2020/09/12 Filter() function supports parallel.
+2020/09/12 Parallel() method is implemented
+2020/09/11 ToMapCollector() function is implemented
+2020/09/10 PartitioningByToSliceCoolector() function is implemented
+2020/09/09 PartitioningByCollector() function is implemented
+2020/09/09 GroupingByToSliceCollector() function is implemented
+2020/09/08 GroupingByCollector() function is implemented.
+2020/09/07 FilteringCollector() function is implemented.
+2020/09/06 FlatMappingCollector() function is implemented.
+2020/09/06 MappingCollector() function is implemented.
+2020/09/05 JoiningCollector() function is implemented.
+2020/09/04 ToSliceCollector() function is implemented.
+2020/09/03 CollectByCollector is implemented, but there is no test code yet.
+2020/09/03 Collect() function signature is fixed
+2020/09/02 Collect() function is implemented
+2020/09/01 FindFirst() method is implemented
+2020/09/01 Max() method is implemented
+2020/09/01 Min() method is implemented
+2020/08/31 ReduceToOptional() method is implemented
+2020/08/30 Optional struct and its associated funcs are implemented, but there is no test code yet.
+2020/08/29 FlatMap() function is implemented
+2020/08/28 Builder is implemented
+2020/08/27 Concat() function is implemented
+2020/08/26 Generate() function is implemented
+2020/08/26 IterateN() function is implemented
+2020/08/25 Iterate() function is implemented
+2020/08/25 Empty() function is implemented
+2020/08/24 NoneMatch() method is implemented
+2020/08/24 AllMatch() method is implemented
+2020/08/24 Renamed StreamFromSlice() to Of()
+2020/08/24 AnyMatch() is implemented
+2020/08/23 Count() is implemented
+2020/08/23 Reduce() function is implemented
+2020/08/23 * Got rid of sliceStream and mapStream
+2020/08/23 Reduce() is implemented
+2020/08/22 ToSlice() is implemented
+2020/08/21 Skip() is implemented
+2020/08/20 Peek() is implemented
+2020/08/19 Fixed all Sorted(), implemented all Limit()
+2020/08/18 Debugging ... added trace() function which should be added to every tests.
+2020/08/17 Sorted is not correctly implemented, I need to fix it
+2020/08/16 implemented Sorted method
