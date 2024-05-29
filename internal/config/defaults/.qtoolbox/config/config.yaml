@@ -1,0 +1,16 @@
+
+repository-metadata: var/repository.yaml
+platform: x64
+os: windows
+
+provider-settings:
+  MavenRelease:
+    base-url: "https://repo1.maven.org/maven2"
+    version-cache-ttl: 24h #default: 24h
+  GitHubRelease:
+    page-size: 100 #default: 100
+    version-cache-ttl: 24h #default: 24h
+  GitHubTagsDownloadUrl:
+    page-size: 100 #default: 100
+    version-cache-ttl: 24h #default: 24h
+
