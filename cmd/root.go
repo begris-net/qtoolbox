@@ -9,10 +9,9 @@ import (
 	"github.com/begris-net/qtoolbox/internal/config"
 	"github.com/begris-net/qtoolbox/internal/log"
 	"github.com/begris-net/qtoolbox/internal/repository"
+	"github.com/spf13/cobra"
 	"os"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
@@ -33,6 +32,10 @@ to quickly create a Cobra application.`,
 		log.SetLogLevel(log.DebugLevel)
 		config.LoadConfig(cfgFile)
 	},
+}
+
+func SetVersionInformation(version string) {
+	rootCmd.Version = version
 }
 
 func Execute() {

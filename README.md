@@ -1,6 +1,11 @@
 # qtoolbox
 Simple SDKman! inspired SDK and tool manager. 
 
+# Local build command
+```shell
+for os in linux windows; do echo "Build $os version..."; GOOS=$os go build -ldflags="-X 'main.Version=v0.0.1-beta'" ; done; ./qtoolbox setup --force
+```
+
 # Config
 
 ## Global config
