@@ -7,7 +7,7 @@ import (
 
 var (
 	DebugLevel int8
-	Logger     = pterm.DefaultLogger.WithTime(false).WithLevel(pterm.LogLevelTrace)
+	Logger     = pterm.DefaultLogger.WithTime(false).WithLevel(pterm.LogLevelTrace).WithWriter(os.Stderr)
 	//Logger      = slog.New(slog.NewTextHandler(os.Stdout))
 	//ErrorLogger = slog.New(slog.NewTextHandler(os.Stderr, nil))
 )
