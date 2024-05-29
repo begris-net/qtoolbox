@@ -40,14 +40,20 @@ done
 unset candidate_name candidate_dir
 export PATH
 
+__QTOOLBOX_POSTPROCESSING_FLAG="##POSTPROCESSING##"
+
 function qtoolbox() {
     local ret args final_rc
     __qtoolbox_debug "qtoolbox wrapper" >&2;
     ret=$(command qtoolbox "$@")
     local final_rc=$?
-    echo $ret
-    args=($(echo $ret | tr " " "\n"))
-    __qtoolbox_postprocessing $args
+    case "$ret" in
+      *$__QTOOLBOX_POSTPROCESSING_FLAG*)
+        args=($(echo $ret | tr " " "\n"))
+        __qtoolbox_postprocessing $args;;
+      *)
+        echo $ret
+    esac
     return $final_rc
 }
 
@@ -129,21 +135,24 @@ function __qtoolbox_process_hook() {
 }
 
 function __qtoolbox_postprocessing() {
-    local cmd candidate version
-    cmd=$1
-    candidate=$2
-    version=$3
+    local flag cmd candidate version
+    flag=$1
+    cmd=$2
+    candidate=$3
+    version=$4
 
-    if [[ -n "$cmd" && -n "$candidate" && -n "$version" ]]; then
-        case $cmd in
-            install|default)
-                __qtoolbox_update_candidate_path $candidate "current"
-                __qtoolbox_set_candidate_home $candidate "current";;
-            use)
-                __qtoolbox_update_candidate_path $candidate $version
-                __qtoolbox_set_candidate_home $candidate $version;;
-        esac
+    if [[ $flag =~ $__QTOOLBOX_POSTPROCESSING_FLAG ]]; then
+        if [[ -n "$cmd" && -n "$candidate" && -n "$version" ]]; then
+            case $cmd in
+                install|default)
+                    __qtoolbox_update_candidate_path $candidate "current"
+                    __qtoolbox_set_candidate_home $candidate "current";;
+                use)
+                    __qtoolbox_update_candidate_path $candidate $version
+                    __qtoolbox_set_candidate_home $candidate $version;;
+            esac
 
-        __qtoolbox_process_hook $cmd "$@"
+            __qtoolbox_process_hook $cmd "$@"
+        fi
     fi
 }
