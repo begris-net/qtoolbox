@@ -9,6 +9,7 @@ import (
 	"github.com/begris-net/qtoolbox/internal/candidate"
 	"github.com/begris-net/qtoolbox/internal/log"
 	"github.com/begris-net/qtoolbox/internal/repository"
+	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
@@ -79,7 +80,7 @@ func makeCandidateVersionDefault(cmd *cobra.Command, args []string) {
 			log.Logger.Debug("Selecteed candidate", log.Logger.Args("candidate", selectedCandidate))
 
 			selectedCandidate.Get().MakeDefault()
-			fmt.Fprintf(os.Stdout, "%s %s %s", "default", candidateName, candidateVersion)
+			fmt.Fprintf(os.Stdout, "%s %s %s %s", types.PostprocessingFlag, "default", candidateName, candidateVersion)
 		} else {
 			pterm.Error.WithWriter(os.Stderr).Printfln("Selected version %s for candidate %s is not installed.", candidateVersion, candidateName)
 			os.Exit(1)

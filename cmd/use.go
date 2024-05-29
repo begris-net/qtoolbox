@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/begris-net/qtoolbox/internal/log"
+	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 	"os"
@@ -38,7 +39,7 @@ func useCandidateVersion(cmd *cobra.Command, args []string) {
 			pterm.Info.WithWriter(os.Stderr).Printfln("Setting %s %s as the default version for current shell.", candidateName, candidateVersion)
 			log.Logger.Debug("Selecteed candidate", log.Logger.Args("candidate", selectedCandidate))
 
-			fmt.Fprintf(os.Stdout, "%s %s %s", "use", candidateName, candidateVersion)
+			fmt.Fprintf(os.Stdout, "%s %s %s %s", types.PostprocessingFlag, "use", candidateName, candidateVersion)
 		} else {
 			pterm.Error.WithWriter(os.Stderr).Printfln("Selected version %s for candidate %s is not installed.", candidateVersion, candidateName)
 			os.Exit(1)

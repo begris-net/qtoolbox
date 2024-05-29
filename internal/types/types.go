@@ -10,6 +10,10 @@ const (
 	MavenRelease          ProviderType = "MavenRelease"
 )
 
+const (
+	PostprocessingFlag = "##POSTPROCESSING##"
+)
+
 type ProviderSettings struct {
 	CachePath              string
 	CandidatesBathPath     string

@@ -11,6 +11,7 @@ import (
 	"github.com/begris-net/qtoolbox/internal/log"
 	"github.com/begris-net/qtoolbox/internal/provider"
 	"github.com/begris-net/qtoolbox/internal/repository"
+	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/begris-net/qtoolbox/internal/util"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pterm/pterm"
@@ -121,7 +122,7 @@ func installCandidate(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
-	fmt.Fprintf(os.Stdout, "%s %s %s", "install", selectedCandidate.Provider.Product, selectedCandidate.Version.String())
+	fmt.Fprintf(os.Stdout, "%s %s %s %s", types.PostprocessingFlag, "install", selectedCandidate.Provider.Product, selectedCandidate.Version.String())
 }
 
 func validCandidateVersions(candidateName string, toComplete string) ([]string, cobra.ShellCompDirective) {
