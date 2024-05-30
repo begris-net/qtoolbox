@@ -71,7 +71,7 @@ candidates:
         vendor: Azul
         type: Zulu
 #        endpoint: https://api.azul.com/metadata/v1
-        endpoint: https://api.azul.com/metadata/v1/zulu/packages/?os={{.OS}}&archive_type={{.ArchiveType}}&java_package_type=jdk&crs_supported=false&support_term=lts&release_type=PSU&latest=true&release_status=ga&availability_types=ca&certifications=tck&page=1&page_size=1000
+        endpoint: https://api.azul.com/metadata/v1/zulu/packages/?os={{.OS}}&arch={{.Arch}}&archive_type={{.OSArchiveExt}}&javafx_bundled=false&java_package_type=jdk&crs_supported=false&support_term=lts&release_type=PSU&latest=true&release_status=ga&availability_types=ca&certifications=tck&page=1&page_size=1000
 #       https://api.azul.com/metadata/v1/zulu/packages/?os=linux&java_package_type=jdk&crs_supported=false&support_term=lts&release_type=PSU&latest=true&release_status=ga&availability_types=ca&certifications=tck&page=1&page_size=1000"
 #       https://api.azul.com/metadata/v1/zulu/packages/b10aee09-fe4e-4e45-9775-f6c3ddca0cb4  --> checksum uuid from download package
         settings:
@@ -84,9 +84,31 @@ candidates:
             386: i686
             arm64: aarch64
             arm: aarch32hf
-          archivetype-mapping:
+          ext-mapping:
             darwin: tar.gz
-            linux: tar.gz
+            linux-glibc: tar.gz
+            windows: zip
+      zulu-fx:
+        id: zulu-fx
+        vendor: Azul
+        type: Zulu
+        #        endpoint: https://api.azul.com/metadata/v1
+        endpoint: https://api.azul.com/metadata/v1/zulu/packages/?os={{.OS}}&arch={{.Arch}}&archive_type={{.OSArchiveExt}}&javafx_bundled=true&java_package_type=jdk&crs_supported=false&support_term=lts&release_type=PSU&latest=true&release_status=ga&availability_types=ca&certifications=tck&page=1&page_size=1000
+        #       https://api.azul.com/metadata/v1/zulu/packages/?os=linux&java_package_type=jdk&crs_supported=false&support_term=lts&release_type=PSU&latest=true&release_status=ga&availability_types=ca&certifications=tck&page=1&page_size=1000"
+        #       https://api.azul.com/metadata/v1/zulu/packages/b10aee09-fe4e-4e45-9775-f6c3ddca0cb4  --> checksum uuid from download package
+        settings:
+          os-mapping:
+            darwin: macosx
+            linux: linux-glibc
+          #           handle alpine linux ==> linux-musl
+          arch-mapping:
+            amd64: x64
+            386: i686
+            arm64: aarch64
+            arm: aarch32hf
+          ext-mapping:
+            darwin: tar.gz
+            linux-glibc: tar.gz
             windows: zip
       amazon-corretto-21:
         id: amzn
