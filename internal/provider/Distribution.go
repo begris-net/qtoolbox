@@ -46,6 +46,7 @@ var providerMap = map[types.ProviderType]Distribution{
 	types.GitHubRelease:         &GithubDistribution{},
 	types.GitHubTagsDownloadUrl: &GitHubTagsDownloadUrl{},
 	types.MavenRelease:          &MavenRelease{},
+	types.Zulu:                  &ZuluDistribution{},
 }
 
 func Distributor(provider types.ProviderType) Distribution {

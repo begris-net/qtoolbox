@@ -13,4 +13,7 @@ provider-settings:
   GitHubTagsDownloadUrl:
     page-size: 100 #default: 100
     version-cache-ttl: 24h #default: 24h
+  Zulu:
+    page-size: 1000 #default: 100
+    version-cache-ttl: 24h #default: 24h
 
