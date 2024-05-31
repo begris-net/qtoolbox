@@ -246,6 +246,26 @@ candidates:
             windows: .exe # if an extension other than the default is required
             #linux:  # if an extension other than the default is required
             #darwin: # if an extension other than the default is required
-#  - argocd-cli:
-#  - stern:
+  - name: stern
+    description: |
+      stern (1.30.0)                                    https://github.com/stern/stern
+
+      Multi pod and container log tailing for Kubernetes
+      
+                                  -- Friendly fork of https://github.com/wercker/stern
+      
+      Stern allows you to tail multiple pods on Kubernetes and multiple containers 
+      within the pod. Each result is color coded for quicker debugging.
+    provider:
+      stern-github:
+        id: stern
+        vendor: stern
+        type: GitHubRelease
+        endpoint: stern/stern
+        #pre-releases: true #default: false
+        ext-mapping:
+          windows: tar.gz # if an extension other than the default is required
+          linux: tar.gz # if an extension other than the default is required
+          darwin: tar.gz # if an extension other than the default is required
 #  - github-cli:
+#  - argocd-cli:
