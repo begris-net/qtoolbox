@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -70,7 +71,7 @@ func (c *Candidate) GetCandidateStatus() {
 		c.Installed = true
 		currentLink, err2 := os.Readlink(c.GetCurrentCandidate())
 		if err2 == nil {
-			c.Default = path.Base(currentLink) == stat.Name()
+			c.Default = path.Base(filepath.ToSlash(currentLink)) == stat.Name()
 		}
 	}
 }

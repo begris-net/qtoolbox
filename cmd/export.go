@@ -24,7 +24,7 @@ var exportCmd = &cobra.Command{
 		repositoryConfig := repository.GetRepository()
 		candidate := repositoryConfig.FindCandidate(CandidateName)
 		if candidate.ExportPath != nil {
-			fmt.Fprintf(os.Stdout, "/%s", util.SafeDeref(candidate.ExportPath))
+			fmt.Fprintf(os.Stdout, "%s", util.SafeDeref(candidate.ExportPath))
 		}
 	},
 }
