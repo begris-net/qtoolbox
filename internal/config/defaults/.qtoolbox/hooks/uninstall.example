@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+# qtoolbox hook script example to integrate Cygwin sdks with Windows environment
+# use `export QTOOLBOX_HOOK_DEBUG=true` to enable debug messages
+
+call() {
+    local candidate="$1"
+    local version="$2"
+
+    if [[ $QTOOLBOX_HOOK_DEBUG ]]; then
+      echo "[DEBUG] QTOOLBOX_DIR: $QTOOLBOX_DIR"
+      echo "[DEBUG] candidate: $candidate"
+      echo "[DEBUG] version: $version"
+    fi
+
+    uninstallUpdateDefault $QTOOLBOX_CANDIDATES_DIR $candidate
+}
+
+uninstallUpdateDefault() {
+    local sdk="$1"
+    local candidate="$2"
+    local candidates="$sdk/$candidate"
+
+    echo "Update default candidate for $candidate"
+
+    local current_candidate=$(readlink "$candidates/current" | grep -Eo '[^/]*$')
+    local current_winsdk="$candidates/_CURRENT"
+    local current_windowscandidate=$(readlink "$current_winsdk" | grep -Eo '[^/]*$')
+
+    if [[ "${current_candidate}" != "${current_windowscandidate}" ]]; then
+        if [[ -L $current_winsdk ]]; then
+            rm $current_winsdk
+        fi
+    fi
+}
+
+call "$@"

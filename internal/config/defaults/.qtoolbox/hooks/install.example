@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+
+# qtoolbox hook script example to integrate Cygwin sdks with Windows environment
+# use `export QTOOLBOX_HOOK_DEBUG=true` to enable debug messages
+
+function call() {
+    local candidate="$1"
+    local version="$2"
+
+    if [[ $QTOOLBOX_HOOK_DEBUG ]]; then
+      echo "[DEBUG] QTOOLBOX_DIR: $QTOOLBOX_DIR"
+      echo "[DEBUG] candidate: $candidate"
+      echo "[DEBUG] version: $version"
+    fi
+
+    if [[ "$candidate" == "java" ]]; then
+        updateLatest $QTOOLBOX_CANDIDATES_DIR $candidate
+    elif [[ "$candidate" == "maven" ]]; then
+        adjustPermissions $QTOOLBOX_CANDIDATES_DIR $candidate
+    fi
+
+    updateDefault $QTOOLBOX_CANDIDATES_DIR $candidate
+}
+
+function updateDefault() {
+    local sdk="$1"
+    local candidate="$2"
+    local candidates="$sdk/$candidate"
+
+    echo "Update default candidate for $candidate"
+
+    local current_candidate=$(find $candidates -mindepth 1 -maxdepth 2 -name current)
+
+    if [[ -d $current_candidate ]]; then
+        CURRENT_SDK=$(cygpath -aw $current_candidate)
+        WIN_SDK=$(cygpath -aw $(dirname $current_candidate))\\_CURRENT
+        if [[ -d $WIN_SDK ]]; then
+            rm $WIN_SDK
+        fi  
+        powershell Start-Process cmd -Verb RunAs -ArgumentList \"/c mklink /D $WIN_SDK $CURRENT_SDK\"
+    fi
+}
+
+function updateLatest() {
+    local sdk="$1"
+    local candidate="$2"
+    local candidates="$sdk/$candidate"
+
+    echo "Update lastest candidates for $candidate"
+
+    local DISTROS=$(find $candidates -maxdepth 1 -regextype egrep -regex '.*/[0-9]+.*' -exec basename {} \; | grep -oE '[^-]+$' | uniq); 
+    local MAJORS=$(find $candidates -maxdepth 1 -regextype egrep -regex '.*/[0-9]+.*' -exec basename {} \; | grep -oE '^[0-9]+' | uniq); 
+    for DISTRO in $DISTROS; do
+        for MAJOR in $MAJORS; do
+            LATEST=$(find $candidates -maxdepth 1 -regextype egrep -regex ".*/$MAJOR.*$DISTRO\$" | sort -V | tail -n1); 
+            if [[ -n $LATEST ]]; then
+                LINKNAME="$candidates/$DISTRO-$MAJOR";
+                if [[ -d $LINKNAME ]]; then
+                    rm $LINKNAME;
+                fi
+                powershell Start-Process cmd -Verb RunAs -ArgumentList \"/c mklink /D $(cygpath -aw $LINKNAME) $(cygpath -aw $LATEST)\";
+            fi;
+        done;
+    done
+}
+
+function adjustPermissions() {
+    local sdk="$1"
+    local candidate="$2"
+    local candidates="$sdk/$candidate"
+    local permissionFiles=( "jansi.dll" "mvn.cmd" "mvnDebug.cmd")
+
+    echo "Update permissions for $candidate"
+
+    for permissionFile in "${permissionFiles[@]}"
+    do
+        find $candidates -name "$permissionFile" -exec chmod +x {} \;
+    done
+}
+
+call "$@"
