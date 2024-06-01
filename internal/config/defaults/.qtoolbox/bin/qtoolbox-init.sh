@@ -35,6 +35,7 @@ function qtoolbox() {
 
 function __qtoolbox_init() {
     QTOOLBOX_BIN_DIR=$QTOOLBOX_DIR/bin
+    export QTOOLBOX_HOOK_DIR=$QTOOLBOX_DIR/hooks
     COMPLETION_FILE="$QTOOLBOX_DIR/var/_completion"
     if [[ -n "$ZSH_VERSION" ]]; then
         $QTOOLBOX_BIN_DIR/qtoolbox completion zsh > $COMPLETION_FILE
@@ -50,7 +51,7 @@ function __qtoolbox_init() {
 
     source $COMPLETION_FILE
     alias qtb=qtoolbox tb=qtoolbox
-    QTOOLBOX_CANDIDATES_DIR="$QTOOLBOX_DIR/candidates"
+    export QTOOLBOX_CANDIDATES_DIR="$QTOOLBOX_DIR/candidates"
 
     __qtoolbox_initialize_candidates $QTOOLBOX_CANDIDATES_DIR
 }
@@ -107,29 +108,33 @@ function __qtoolbox_set_candidate_home() {
 }
 
 function __qtoolbox_process_hook() {
-#    cmd=$1
-#    candidate=$2
-#    version=$3
-#    candidate_dir="${CANDIDATES_DIR}/${candidate}/${version}"
-#    if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
-#        candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate_name")
-#        __pathadd "$candidate_dir$candidate_bin"
-#    fi
-#    export PATH
-#    echo "hook"
-    arg="t"
+    local command="$1"
+    shift 1;
+
+    if [[ $QTOOLBOX_HOOK_DEBUG ]]; then
+        echo "[DEBUG] hook command: $command"
+    fi
+
+    if [[ -f "$QTOOLBOX_HOOK_DIR/$command" ]]; then
+        if [[ $QTOOLBOX_HOOK_DEBUG ]]; then
+            echo "[DEBUG] hook availabe: $QTOOLBOX_HOOK_DIR/$command"
+        fi
+        "$QTOOLBOX_HOOK_DIR/$command" $@
+    fi
 }
 
 function __qtoolbox_postprocessing() {
-    local flag cmd candidate version
+    local flag command candidate version
     flag=$1
-    cmd=$2
-    candidate=$3
-    version=$4
+    shift 1;
+    command=$1
+    shift 1;
+    candidate=$1
+    version=$2
 
     if [[ $flag =~ $__QTOOLBOX_POSTPROCESSING_FLAG ]]; then
-        if [[ -n "$cmd" && -n "$candidate" && -n "$version" ]]; then
-            case $cmd in
+        if [[ -n "$command" && -n "$candidate" && -n "$version" ]]; then
+            case $command in
                 install|default)
                     __qtoolbox_update_candidate_path $candidate "current"
                     __qtoolbox_set_candidate_home $candidate "current";;
@@ -138,7 +143,7 @@ function __qtoolbox_postprocessing() {
                     __qtoolbox_set_candidate_home $candidate $version;;
             esac
 
-            __qtoolbox_process_hook $cmd "$@"
+            __qtoolbox_process_hook $command $candidate $version
         fi
     fi
 }
