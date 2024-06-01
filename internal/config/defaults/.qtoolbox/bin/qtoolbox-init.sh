@@ -75,21 +75,17 @@ function __qtoolbox_update_candidate_path() {
     if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
         candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate")
 
-        if [[ -z "$candidate_bin" ]]; then
-            close_path=":"
-        fi
-
-        if [[ $PATH =~ ${QTOOLBOX_CANDIDATES_DIR}/${candidate}/([^/]+)([^:]+) ]]; then
+        if [[ $PATH =~ ${QTOOLBOX_CANDIDATES_DIR}\/${candidate}\/([^/:]+)([^:]*) ]]; then
             local matched_version match_path
 
-            if [[ "$zsh_shell" == "true" ]]; then
+            if [[ "$ZSH_VERSION" == "$($SHELL -c 'echo $ZSH_VERSION')" ]]; then
                 matched_version=${match[1]}
                 matched_path=${match[2]}
             else
                 matched_version=${BASH_REMATCH[1]}
                 matched_path=${BASH_REMATCH[2]}
             fi
-            export PATH=${PATH//${QTOOLBOX_CANDIDATES_DIR}\/${candidate}\/${matched_version}/${QTOOLBOX_CANDIDATES_DIR}\/${candidate}\/${version}${close_path}}
+            export PATH=${PATH//${QTOOLBOX_CANDIDATES_DIR}\/${candidate}\/${matched_version}${matched_path}/${QTOOLBOX_CANDIDATES_DIR}\/${candidate}\/${version}${matched_path}}
         else
             if [[ -n "$candidate_bin" ]]; then
                 candidate_dir="$candidate_dir/$candidate_bin"
@@ -99,6 +95,7 @@ function __qtoolbox_update_candidate_path() {
     fi
     export PATH
 }
+#typeset -fTt __qtoolbox_update_candidate_path
 
 function __qtoolbox_set_candidate_home() {
 	local candidate version upper_candidate
