@@ -2,14 +2,7 @@
 
 if [ -z "$QTOOLBOX_DIR" ]; then
     BIN_DIR="$( dirname -- "$0")"
-	export QTOOLBOX_DIR="$( readlink -m "$BIN_DIR/..")"
-fi
-QTOOLBOX_BIN_DIR=$QTOOLBOX_DIR/bin
-COMPLETION_FILE="$QTOOLBOX_DIR/var/_completion"
-if [[ -n "$ZSH_VERSION" ]]; then
-	$QTOOLBOX_BIN_DIR/qtoolbox completion zsh > $COMPLETION_FILE
-elif [[ -n "$BASH_VERSION" ]]; then
-	$QTOOLBOX_BIN_DIR/qtoolbox completion bash > $COMPLETION_FILE
+    export QTOOLBOX_DIR="$( readlink -m "$BIN_DIR/..")"
 fi
 
 function __qtoolbox_pathadd {
@@ -22,23 +15,6 @@ function __qtoolbox_debug {
         echo "$@"
     fi
 }
-
-__qtoolbox_pathadd $QTOOLBOX_BIN_DIR
-source $COMPLETION_FILE
-alias qtb=qtoolbox tb=qtoolbox
-
-QTOOLBOX_CANDIDATES_DIR="$QTOOLBOX_DIR/candidates"
-# init installed candidates
-for candidate_name in $(find $QTOOLBOX_CANDIDATES_DIR -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
-    __qtoolbox_debug "candidate: $candidate_name"
-	candidate_dir="${QTOOLBOX_CANDIDATES_DIR}/${candidate_name}/current"
-	if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
-        candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate_name")
-        __qtoolbox_pathadd "$candidate_dir$candidate_bin"
-	fi
-done
-unset candidate_name candidate_dir
-export PATH
 
 __QTOOLBOX_POSTPROCESSING_FLAG="##POSTPROCESSING##"
 
@@ -58,10 +34,27 @@ function qtoolbox() {
 }
 
 function __qtoolbox_init() {
+    QTOOLBOX_BIN_DIR=$QTOOLBOX_DIR/bin
+    COMPLETION_FILE="$QTOOLBOX_DIR/var/_completion"
+    if [[ -n "$ZSH_VERSION" ]]; then
+        $QTOOLBOX_BIN_DIR/qtoolbox completion zsh > $COMPLETION_FILE
+    elif [[ -n "$BASH_VERSION" ]]; then
+        $QTOOLBOX_BIN_DIR/qtoolbox completion bash > $COMPLETION_FILE
+    fi
 
+    if [[ $PATH =~ ${QTOOLBOX_BIN_DIR} ]]; then
+        export PATH=${PATH//${QTOOLBOX_BIN_DIR}/${QTOOLBOX_BIN_DIR}}
+    else
+        __qtoolbox_pathadd "$QTOOLBOX_BIN_DIR"
+    fi
+
+    source $COMPLETION_FILE
+    alias qtb=qtoolbox tb=qtoolbox
+    QTOOLBOX_CANDIDATES_DIR="$QTOOLBOX_DIR/candidates"
 
     __qtoolbox_initialize_candidates $QTOOLBOX_CANDIDATES_DIR
 }
+#typeset -fTt __qtoolbox_init
 
 function __qtoolbox_initialize_candidates() {
     local qtoolbox_candidates_dir candidate_name candidate_dir
@@ -69,11 +62,7 @@ function __qtoolbox_initialize_candidates() {
 
     for candidate_name in $(find $qtoolbox_candidates_dir -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
         __qtoolbox_debug "candidate: $candidate_name"
-    	candidate_dir="${QTOOLBOX_CANDIDATES_DIR}/${candidate_name}/current"
-    	if [[ -h "$candidate_dir" || -d "${candidate_dir}" ]]; then
-            candidate_bin=$($QTOOLBOX_BIN_DIR/qtoolbox candidate export "$candidate_name")
-            __qtoolbox_pathadd "$candidate_dir$candidate_bin"
-    	fi
+    	__qtoolbox_update_candidate_path "$candidate_name" current
     done
 }
 
@@ -156,3 +145,5 @@ function __qtoolbox_postprocessing() {
         fi
     fi
 }
+
+__qtoolbox_init
