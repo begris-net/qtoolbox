@@ -267,5 +267,29 @@ candidates:
           windows: tar.gz # if an extension other than the default is required
           linux: tar.gz # if an extension other than the default is required
           darwin: tar.gz # if an extension other than the default is required
+  - name: oc
+    description: |
+      oc (4.15.0)                                   https://github.com/okd-project/okd
+      
+      Client tools for OKD
+    provider:
+      okd-github:
+        # the okd-project releases multiple artifact-types in a release, therefore we can't use the GitHubRelease provider
+        id: okd
+        vendor: OKD Community
+        type: GitHubTagsDownloadUrl
+        endpoint: okd-project/okd
+        #pre-releases: true #default: false
+        settings:
+          url: https://github.com/okd-project/okd/releases/download/{{.Version}}/openshift-client-{{.OS}}{{ if ("" | ne .Arch) }}-{{.Arch}}{{ end }}-{{.Version}}.{{.OSArchiveExt}}
+          os-mapping:
+            darwin: mac
+          arch-mapping:
+            amd64: "" # is handled as the default architecture by the okd-project, therefore wen need a special handling for this case
+          ext-mapping:
+            windows: zip # if an extension other than the default is required
+            linux: tar.gz # if an extension other than the default is required
+            darwin: tar.gz # if an extension other than the default is required
+
 #  - github-cli:
 #  - argocd-cli:
