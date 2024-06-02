@@ -15,6 +15,7 @@ import (
 	"github.com/begris-net/qtoolbox/internal/util"
 	"github.com/google/go-github/v57/github"
 	"net/url"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -111,16 +112,29 @@ func (d *GithubDistribution) Download(installCandidate candidate.Candidate) (*in
 	log.Logger.Debug(fmt.Sprintf("Going to install version %s of candidate %s.", installCandidate.Version.Original(), installCandidate.Provider.Product))
 	log.Logger.Trace("System detection for download determination", log.Logger.Args("os", runtime.GOOS, "arch", runtime.GOARCH, "GOROOT", runtime.GOROOT()))
 
-	archRegex, err := platformHandler.GetArchitectureRegex(arch)
-	if err != nil {
-		log.Logger.Error(err.Error(), log.Logger.Args("arch", arch))
-		return nil, err
+	var err error
+	mappedArch, err := platformHandler.MapArchitectureChecked(arch)
+	var archRegex *regexp.Regexp
+	if err == nil {
+		archRegex = regexp.MustCompile(fmt.Sprintf(".*%s.*", mappedArch))
+	} else {
+		archRegex, err = platformHandler.GetArchitectureRegex(arch)
+		if err != nil {
+			log.Logger.Error(err.Error(), log.Logger.Args("arch", arch))
+			return nil, err
+		}
 	}
 
-	extRegex, err := platformHandler.GetExtensionRegex(os)
-	if err != nil {
-		log.Logger.Error(err.Error(), log.Logger.Args("os", os))
-		return nil, err
+	extension, err := platformHandler.MapExtensionChecked(os)
+	var extRegex *regexp.Regexp
+	if err == nil {
+		extRegex = regexp.MustCompile(fmt.Sprintf(".*%s$", extension))
+	} else {
+		extRegex, err = platformHandler.GetExtensionRegex(os)
+		if err != nil {
+			log.Logger.Error(err.Error(), log.Logger.Args("os", os))
+			return nil, err
+		}
 	}
 
 	release := gostream.Of(releases...).Filter(func(t *github.RepositoryRelease) bool {
@@ -143,7 +157,9 @@ func (d *GithubDistribution) Download(installCandidate candidate.Candidate) (*in
 			log.Logger.ArgsFromMap(assets))
 	}
 
-	log.Logger.Trace("System detection for download determination", log.Logger.Args("os", runtime.GOOS, "arch", runtime.GOARCH, "GOROOT", runtime.GOROOT()))
+	log.Logger.Trace("System detection for download determination", log.Logger.Args("os", runtime.GOOS,
+		"arch", runtime.GOARCH, "mapped-os", platformHandler.MapOS(os), "arch-regex", archRegex, "extension-regex", extRegex,
+		"GOROOT", runtime.GOROOT()))
 	var candidateDownload *installer.CandidateDownload
 	var noAssetErr error
 	gostream.Of(releaseAssets...).FindFirst().IfPresentOrElse(func(t *github.ReleaseAsset) {
