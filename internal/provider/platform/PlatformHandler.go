@@ -22,6 +22,8 @@ type PlatformHandler struct {
 	settings map[string]any
 }
 
+var NotFound = errors.New("Element not found")
+
 func NewPlatformHandler(settings map[string]any) *PlatformHandler {
 	return &PlatformHandler{
 		settings,
@@ -63,27 +65,51 @@ func (p *PlatformHandler) GetExtensionRegex(os string) (*regexp.Regexp, error) {
 }
 
 func (p *PlatformHandler) MapOS(os string) string {
+	mappedOS, err := p.MapOSChecked(os)
+	if err != nil && errors.Is(err, NotFound) {
+		return os
+	}
+	return mappedOS
+}
+
+func (p *PlatformHandler) MapOSChecked(os string) (string, error) {
 	if p.settings[OS_Mapping] != nil {
 		log.Logger.Debug("OS mapping:", log.Logger.Args("mappingTable", OS_Mapping, "mappings", p.settings[OS_Mapping]))
-		return p.MapOriginalValue(p.settings[OS_Mapping], os, os)
+		return p.MapOriginalValue(p.settings[OS_Mapping], os, os), nil
 	}
-	return os
+	return "", NotFound
 }
 
 func (p *PlatformHandler) MapArchitecture(arch string) string {
+	mappedArch, err := p.MapArchitectureChecked(arch)
+	if err != nil && errors.Is(err, NotFound) {
+		return arch
+	}
+	return mappedArch
+}
+
+func (p *PlatformHandler) MapArchitectureChecked(arch string) (string, error) {
 	if p.settings[Arch_Mapping] != nil {
 		log.Logger.Debug("Arch mapping:", log.Logger.Args("mappingTable", Arch_Mapping, "mappings", p.settings[Arch_Mapping]))
-		return p.MapOriginalValue(p.settings[Arch_Mapping], arch, arch)
+		return p.MapOriginalValue(p.settings[Arch_Mapping], arch, arch), nil
 	}
-	return arch
+	return "", NotFound
 }
 
 func (p *PlatformHandler) MapExtension(ext string) string {
+	mappedExt, err := p.MapExtensionChecked(ext)
+	if err != nil && errors.Is(err, NotFound) {
+		return ext
+	}
+	return mappedExt
+}
+
+func (p *PlatformHandler) MapExtensionChecked(ext string) (string, error) {
 	if p.settings[Extention_Mapping] != nil {
 		log.Logger.Debug("Extention mapping:", log.Logger.Args("mappingTable", Extention_Mapping, "mappings", p.settings[Extention_Mapping]))
-		return p.MapOriginalValue(p.settings[Extention_Mapping], ext, "")
+		return p.MapOriginalValue(p.settings[Extention_Mapping], ext, ""), nil
 	}
-	return ext
+	return "", NotFound
 }
 
 func (p *PlatformHandler) MapOriginalValue(mappingTable any, value string, defaultValue string) string {
