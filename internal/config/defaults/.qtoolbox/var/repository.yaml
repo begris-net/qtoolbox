@@ -267,6 +267,31 @@ candidates:
           windows: tar.gz # if an extension other than the default is required
           linux: tar.gz # if an extension other than the default is required
           darwin: tar.gz # if an extension other than the default is required
+  - name: gitui
+    description: |
+      gitui (0.26.3)                               https://github.com/extrawurst/gitui
+
+      Blazing 💥 fast terminal-ui for git written in rust 🦀
+
+      GitUI provides you with the user experience and comfort of a git GUI but right 
+      in your terminal while being portable, fast, free and opensource.
+    provider:
+      gitui-github:
+        id: gitui
+        vendor: extrawurst
+        type: GitHubTagsDownloadUrl
+        endpoint: extrawurst/gitui
+        #pre-releases: true #default: false
+        settings:
+          url: https://github.com/extrawurst/gitui/releases/download/{{.Version}}/gitui-{{.OS}}{{if (and (eq .OS "mac") (eq .Arch "amd64"))}}-x86{{else if (eq .OS "linux")}}-{{.Arch}}{{ end }}.{{.OSArchiveExt}}
+          os-mapping:
+            darwin: mac
+          arch-mapping:
+            amd64: "x86_64" # is handled as the default architecture by the okd-project, therefore wen need a special handling for this case
+          ext-mapping:
+            windows: tar.gz # if an extension other than the default is required
+            linux: tar.gz # if an extension other than the default is required
+            darwin: tar.gz # if an extension other than the default is required
   - name: oc
     description: |
       oc (4.15.0)                                   https://github.com/okd-project/okd
