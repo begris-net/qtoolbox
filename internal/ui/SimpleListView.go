@@ -72,7 +72,7 @@ func (v *ViewItem) generateRows() [][]string {
 	rows := make([][]string, number_of_rows)
 	for row := 0; row < number_of_rows; row++ {
 		currentRow := make([]string, number_of_columns)
-		for column := 0; column < number_of_columns; column++ {
+		for column := 0; column < number_of_columns && column < len(chunks); column++ {
 			if len(chunks[column]) > row {
 				currentRow[column] = chunks[column][row].renderViewElement()
 			}
