@@ -9,10 +9,12 @@ import (
 	extract "github.com/codeclysm/extract/v3"
 	"github.com/imroc/req/v3"
 	"golift.io/xtractr"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 func (d *CandidateDownload) ensureDownloadPathExists(downloadPath string) {
@@ -90,10 +92,39 @@ func (d *CandidateDownload) CheckedDownload(destination string) (*req.Response, 
 		os.MkdirAll(d.InstallPath, 0750)
 
 		candidateExecutable := path.Join(d.InstallPath, candidateArchive)
-		os.Rename(candidateArchivePath, candidateExecutable)
+
+		copyBinary := func(src string, dst string) error {
+			log.Logger.Info("Copying binary.", log.Logger.Args("src", src, "dst", dst))
+			in, err := os.Open(src)
+			if err != nil {
+				return err
+			}
+			defer in.Close()
+
+			out, err := os.Create(dst)
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+
+			_, err = io.Copy(out, in)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+
+		for retries := 0; retries < 3; retries++ {
+			err = copyBinary(candidateArchivePath, candidateExecutable)
+			if err == nil {
+				break
+			}
+			log.Logger.Debug("Move binary", log.Logger.Args("archive-path", candidateArchivePath, "executeable", candidateExecutable, "try", retries, "err", err))
+			time.Sleep(500 * time.Millisecond)
+		}
 		if d.FileMode != "" {
 			mode, _ := strconv.ParseUint(d.FileMode, 10, 32)
-			log.Logger.Debug("Setting file mode for executable", log.Logger.Args("file-mode", d.FileMode, "mode", mode))
+			log.Logger.Debug("Setting file mode for executable", log.Logger.Args("file-mode", d.FileMode, "mode", mode, "err", err))
 			os.Chmod(candidateExecutable, os.FileMode(mode))
 		}
 		// reset error, as this one was expected
