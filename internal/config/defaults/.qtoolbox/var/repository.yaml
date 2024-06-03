@@ -286,10 +286,11 @@ candidates:
           url: https://github.com/extrawurst/gitui/releases/download/{{.Version}}/gitui-{{.OS}}{{if (and (eq .OS "mac") (eq .Arch "amd64"))}}-x86{{else if (eq .OS "linux")}}-{{.Arch}}{{ end }}.{{.OSArchiveExt}}
           os-mapping:
             darwin: mac
+            windows: win
           arch-mapping:
             amd64: "x86_64" # is handled as the default architecture by the okd-project, therefore wen need a special handling for this case
           ext-mapping:
-            windows: tar.gz # if an extension other than the default is required
+            win: tar.gz # if an extension other than the default is required
             linux: tar.gz # if an extension other than the default is required
             darwin: tar.gz # if an extension other than the default is required
   - name: oc
