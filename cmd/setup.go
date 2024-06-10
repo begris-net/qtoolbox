@@ -4,6 +4,7 @@ Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/begris-net/qtoolbox/internal/config"
 	"github.com/begris-net/qtoolbox/internal/config/defaults"
@@ -54,7 +55,8 @@ func setup(cmd *cobra.Command, args []string) {
 		log.Logger.Fatal("Error installing qtoolbox binary.", log.Logger.Args("err", err))
 	}
 	log.Logger.Info("Integrating qtoolbox in shell...")
-	log.Logger.Warn("not-yet-implemented - please call", log.Logger.Args("cmd", "source ~/.qtoolbox/bin/qtoolbox-init.sh"))
+	integrateShell(homeDir)
+	log.Logger.Warn("Restart your shell or call manually", log.Logger.Args("cmd", "source ~/.qtoolbox/bin/qtoolbox-init.sh"))
 }
 
 func installQtoolbox(src string, dst string) error {
@@ -134,6 +136,52 @@ func extractInstallation(dirs []fs.DirEntry, homeDir string, parent string, inde
 				panic(err)
 			}
 		}
+	}
+}
+
+const shell_integration_line = "[[ -s \"$HOME/.qtoolbox/bin/qtoolbox-init.sh\" ]] && source \"$HOME/.qtoolbox/bin/qtoolbox-init.sh\""
+
+func updateShellRC(rcfile string) {
+	stat, err2 := os.Stat(rcfile)
+	if err2 != nil {
+		log.Logger.Error(fmt.Sprintf("Error opening recource file for shell. (stat)", log.Logger.Args("err", err2, "file-name", rcfile)))
+	}
+	var file, err = os.OpenFile(rcfile, os.O_APPEND|os.O_RDWR, stat.Mode())
+	if err != nil {
+		log.Logger.Error(fmt.Sprintf("Error opening recource file for shell.", log.Logger.Args("err", err, "file-name", rcfile)))
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		if strings.Contains(scanner.Text(), shell_integration_line) {
+			log.Logger.Info(fmt.Sprintf("Already integrated into shell."))
+			return
+		}
+	}
+	if err = scanner.Err(); err != nil {
+		log.Logger.Error(fmt.Sprintf("Error while scanning recource file.", log.Logger.Args("err", err, "file-name", rcfile)))
+	} else {
+		bytesWritten, err := file.WriteString(fmt.Sprintf("\n%s\n", shell_integration_line))
+		if err != nil {
+			log.Logger.Error(fmt.Sprintf("Error during updating recource file.", log.Logger.Args("err", err, "bytes-written", bytesWritten)))
+		}
+	}
+}
+
+func integrateShell(homedir string) {
+	shell := os.Getenv("SHELL")
+	shell = filepath.Base(shell)
+	switch shell {
+	case "zsh":
+		log.Logger.WithWriter(os.Stderr).Info(fmt.Sprintf("Found zsh."))
+		updateShellRC(path.Join(homedir, ".zshrc"))
+	case "bash":
+		log.Logger.WithWriter(os.Stderr).Info(fmt.Sprintf("Found bash."))
+		updateShellRC(path.Join(homedir, ".bashrc"))
+	case "fish", "powershell":
+		log.Logger.Warn(fmt.Sprintf("Automatic integration for %s not supported yet. Please ensure to include the init command into your shell.", shell), log.Logger.Args("cmd", "source ~/.qtoolbox/bin/qtoolbox-init.sh"))
+	case "cmd", "csh":
+		log.Logger.Error(fmt.Sprintf("%s is not supported.", shell))
 	}
 }
 
