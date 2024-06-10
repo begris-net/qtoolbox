@@ -64,6 +64,7 @@ function __qtoolbox_initialize_candidates() {
     for candidate_name in $(find $qtoolbox_candidates_dir -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
         __qtoolbox_debug "candidate: $candidate_name"
     	__qtoolbox_update_candidate_path "$candidate_name" current
+    	__qtoolbox_set_candidate_home $candidate_name "current"
     done
 }
 
