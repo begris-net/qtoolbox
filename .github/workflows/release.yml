@@ -1,0 +1,35 @@
+name: qtoolbox-release
+
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  ci-matrix:
+    name: Release builds
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # build and publish in parallel: linux/386, linux/amd64, linux/arm64, windows/386, windows/amd64, darwin/amd64, darwin/arm64
+        goos: [ linux, windows, darwin ]
+        goarch: [ amd64, arm64 ]
+        exclude:
+          - goarch: arm64
+            goos: windows
+    steps:
+      - name: checkout codebase
+        uses: actions/checkout@v4.1.5
+      - name: Set APP_VERSION env
+        run: echo APP_VERSION=$(basename ${GITHUB_REF}) >> ${GITHUB_ENV}
+
+      - name: Build for ${{ matrix.goos }} ${{ matrix.goarch }}
+        uses: wangyoucao577/go-release-action@v1.50
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          goversion: "1.21"
+          binary_name: "qtoolbox"
+          ldflags: -X "qtoolbox/main.Version=v${{ env.APP_VERSION }}"
+          extra_files: LICENSE README.md
