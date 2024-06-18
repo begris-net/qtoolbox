@@ -26,7 +26,7 @@ jobs:
         run: echo APP_VERSION=$(basename ${GITHUB_REF}) >> ${GITHUB_ENV}
 
       - name: Build for ${{ matrix.goos }} ${{ matrix.goarch }}
-        uses: wangyoucao577/go-release-action@v1.50
+        uses: wangyoucao577/go-release-action@v1.51
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
