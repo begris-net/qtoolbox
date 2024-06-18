@@ -13,7 +13,7 @@ require (
 	github.com/mariomac/gostream v0.8.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pterm/pterm v0.12.79
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	golift.io/xtractr v0.2.2
 	gopkg.in/yaml.v3 v3.0.1
 )
