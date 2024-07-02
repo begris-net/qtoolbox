@@ -284,10 +284,11 @@ candidates:
         type: GitHubRelease
         endpoint: stern/stern
         #pre-releases: true #default: false
-        ext-mapping:
-          windows: tar.gz # if an extension other than the default is required
-          linux: tar.gz # if an extension other than the default is required
-          darwin: tar.gz # if an extension other than the default is required
+        settings:
+          ext-mapping:
+            windows: tar.gz # if an extension other than the default is required
+            linux: tar.gz # if an extension other than the default is required
+            darwin: tar.gz # if an extension other than the default is required
   - name: gitui
     description: |
       gitui (0.26.3)                               https://github.com/extrawurst/gitui
