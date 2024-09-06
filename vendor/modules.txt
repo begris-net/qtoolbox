@@ -130,7 +130,7 @@ github.com/hashicorp/go-version
 github.com/hashicorp/golang-lru/v2
 github.com/hashicorp/golang-lru/v2/internal
 github.com/hashicorp/golang-lru/v2/simplelru
-# github.com/imroc/req/v3 v3.43.7
+# github.com/imroc/req/v3 v3.44.0
 ## explicit; go 1.21
 github.com/imroc/req/v3
 github.com/imroc/req/v3/http2
@@ -140,6 +140,7 @@ github.com/imroc/req/v3/internal/ascii
 github.com/imroc/req/v3/internal/bisect
 github.com/imroc/req/v3/internal/charsets
 github.com/imroc/req/v3/internal/common
+github.com/imroc/req/v3/internal/compress
 github.com/imroc/req/v3/internal/dump
 github.com/imroc/req/v3/internal/godebug
 github.com/imroc/req/v3/internal/godebugs

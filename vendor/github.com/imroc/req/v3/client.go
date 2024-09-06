@@ -278,7 +278,6 @@ func (c *Client) appendRootCertData(data []byte) {
 		config.RootCAs = x509.NewCertPool()
 	}
 	config.RootCAs.AppendCertsFromPEM(data)
-	return
 }
 
 // SetRootCertFromString set root certificates from string.
@@ -378,6 +377,18 @@ func (c *Client) DisableCompression() *Client {
 // EnableCompression enables the compression (enabled by default).
 func (c *Client) EnableCompression() *Client {
 	c.Transport.DisableCompression = false
+	return c
+}
+
+// EnableAutoDecompress enables the automatic decompression (disabled by default).
+func (c *Client) EnableAutoDecompress() *Client {
+	c.Transport.AutoDecompression = true
+	return c
+}
+
+// DisableAutoDecompress disables the automatic decompression (disabled by default).
+func (c *Client) DisableAutoDecompress() *Client {
+	c.Transport.AutoDecompression = false
 	return c
 }
 

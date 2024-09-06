@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/imroc/req/v3/internal/compress"
 	"github.com/imroc/req/v3/internal/dump"
 	"github.com/imroc/req/v3/internal/quic-go/quicvarint"
 	"github.com/imroc/req/v3/internal/transport"
@@ -498,8 +499,17 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 		res.Header.Del("Content-Encoding")
 		res.Header.Del("Content-Length")
 		res.ContentLength = -1
-		res.Body = newGzipReader(respBody)
+		res.Body = compress.NewGzipReader(respBody)
 		res.Uncompressed = true
+	} else if c.opt.AutoDecompression {
+		contentEncoding := res.Header.Get("Content-Encoding")
+		if contentEncoding != "" {
+			res.Header.Del("Content-Encoding")
+			res.Header.Del("Content-Length")
+			res.ContentLength = -1
+			res.Uncompressed = true
+			res.Body = compress.NewCompressReader(respBody, contentEncoding)
+		}
 	} else {
 		res.Body = respBody
 	}
