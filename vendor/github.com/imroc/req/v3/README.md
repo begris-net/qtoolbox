@@ -35,7 +35,7 @@ Full documentation is available on the official website: https://req.cool.
 
 **Install**
 
-You first need [Go](https://go.dev/) installed (version 1.20+ is required), then you can use the below Go command to install req:
+You first need [Go](https://go.dev/) installed (version 1.22+ is required), then you can use the below Go command to install req:
 
 ``` sh
 go get github.com/imroc/req/v3
@@ -501,7 +501,6 @@ If you have questions, feel free to reach out to us in the following ways:
 
 * [Github Discussion](https://github.com/imroc/req/discussions)
 * [Slack](https://imroc-req.slack.com/archives/C03UFPGSNC8) | [Join](https://slack.req.cool/)
-* QQ Group (Chinese): 621411351 - <a href="https://qm.qq.com/cgi-bin/qm/qr?k=P8vOMuNytG-hhtPlgijwW6orJV765OAO&jump_from=webapi"><img src="https://pub.idqqimg.com/wpa/images/group.png"></a>
 
 ## Sponsors
 
