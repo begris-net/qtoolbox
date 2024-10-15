@@ -2,6 +2,7 @@ package req
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -124,9 +125,22 @@ func writeMultipartFormFile(w *multipart.Writer, file *FileUpload, r *Request) e
 
 func writeMultiPart(r *Request, w *multipart.Writer) {
 	defer w.Close() // close multipart to write tailer boundary
-	for k, vs := range r.FormData {
-		for _, v := range vs {
-			w.WriteField(k, v)
+	if len(r.FormData) > 0 {
+		for k, vs := range r.FormData {
+			for _, v := range vs {
+				w.WriteField(k, v)
+			}
+		}
+	} else if len(r.OrderedFormData) > 0 {
+		if len(r.OrderedFormData)%2 != 0 {
+			r.error = errBadOrderedFormData
+			return
+		}
+		maxIndex := len(r.OrderedFormData) - 2
+		for i := 0; i <= maxIndex; i += 2 {
+			key := r.OrderedFormData[i]
+			value := r.OrderedFormData[i+1]
+			w.WriteField(key, value)
 		}
 	}
 	for _, file := range r.uploadFiles {
@@ -135,12 +149,20 @@ func writeMultiPart(r *Request, w *multipart.Writer) {
 }
 
 func handleMultiPart(c *Client, r *Request) (err error) {
+	var b string
+	if c.multipartBoundaryFunc != nil {
+		b = c.multipartBoundaryFunc()
+	}
+
 	if r.forceChunkedEncoding {
 		pr, pw := io.Pipe()
 		r.GetBody = func() (io.ReadCloser, error) {
 			return pr, nil
 		}
 		w := multipart.NewWriter(pw)
+		if len(b) > 0 {
+			w.SetBoundary(b)
+		}
 		r.SetContentType(w.FormDataContentType())
 		go func() {
 			writeMultiPart(r, w)
@@ -149,6 +171,9 @@ func handleMultiPart(c *Client, r *Request) (err error) {
 	} else {
 		buf := new(bytes.Buffer)
 		w := multipart.NewWriter(buf)
+		if len(b) > 0 {
+			w.SetBoundary(b)
+		}
 		writeMultiPart(r, w)
 		r.GetBody = func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
@@ -162,6 +187,29 @@ func handleMultiPart(c *Client, r *Request) (err error) {
 func handleFormData(r *Request) {
 	r.SetContentType(header.FormContentType)
 	r.SetBodyBytes([]byte(r.FormData.Encode()))
+}
+
+var errBadOrderedFormData = errors.New("bad ordered form data, the number of key-value pairs should be an even number")
+
+func handleOrderedFormData(r *Request) {
+	r.SetContentType(header.FormContentType)
+	if len(r.OrderedFormData)%2 != 0 {
+		r.error = errBadOrderedFormData
+		return
+	}
+	maxIndex := len(r.OrderedFormData) - 2
+	var buf strings.Builder
+	for i := 0; i <= maxIndex; i += 2 {
+		key := r.OrderedFormData[i]
+		value := r.OrderedFormData[i+1]
+		if buf.Len() > 0 {
+			buf.WriteByte('&')
+		}
+		buf.WriteString(url.QueryEscape(key))
+		buf.WriteByte('=')
+		buf.WriteString(url.QueryEscape(value))
+	}
+	r.SetBodyString(buf.String())
 }
 
 func handleMarshalBody(c *Client, r *Request) error {
@@ -212,8 +260,12 @@ func parseRequestBody(c *Client, r *Request) (err error) {
 	if len(c.FormData) > 0 {
 		r.SetFormDataFromValues(c.FormData)
 	}
+
 	if len(r.FormData) > 0 {
 		handleFormData(r)
+		return
+	} else if len(r.OrderedFormData) > 0 {
+		handleOrderedFormData(r)
 		return
 	}
 
@@ -256,7 +308,6 @@ func unmarshalBody(c *Client, r *Response, v interface{}) (err error) {
 		}
 		return c.jsonUnmarshal(body, v)
 	}
-	return
 }
 
 func defaultResultStateChecker(resp *Response) ResultState {
@@ -490,9 +541,9 @@ func parseRequestHeader(c *Client, r *Request) error {
 }
 
 func parseRequestCookie(c *Client, r *Request) error {
-	if len(c.Cookies) == 0 || r.RetryAttempt > 0 {
-		return nil
+	if len(c.Cookies) > 0 || r.RetryAttempt <= 0 {
+		r.Cookies = append(r.Cookies, c.Cookies...)
 	}
-	r.Cookies = append(r.Cookies, c.Cookies...)
+
 	return nil
 }
