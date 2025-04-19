@@ -27,7 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/begris-net/qtoolbox/internal/log"
-	extract "github.com/codeclysm/extract/v3"
+	extract "github.com/codeclysm/extract/v4"
 	"github.com/imroc/req/v3"
 	"golift.io/xtractr"
 	"io"
