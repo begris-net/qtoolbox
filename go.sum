@@ -125,8 +125,8 @@ github.com/hashicorp/golang-lru v0.5.1/go.mod h1:/m3WP610KZHVQ1SGc6re/UDhFvYD7pJ
 github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k=
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
-github.com/imroc/req/v3 v3.49.1 h1:Nvwo02riiPEzh74ozFHeEJrtjakFxnoWNR3YZYuQm9U=
-github.com/imroc/req/v3 v3.49.1/go.mod h1:tsOk8K7zI6cU4xu/VWCZVtq9Djw9IWm4MslKzme5woU=
+github.com/imroc/req/v3 v3.50.0 h1:n3BVnZiTRpvkN5T1IB79LC/THhFU9iXksNRMH4ZNVaY=
+github.com/imroc/req/v3 v3.50.0/go.mod h1:tsOk8K7zI6cU4xu/VWCZVtq9Djw9IWm4MslKzme5woU=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/jstemmer/go-junit-report v0.0.0-20190106144839-af01ea7f8024/go.mod h1:6v2b51hI/fHJwM22ozAgKL4VKDeJcHhJFhtBdhmNjmU=
