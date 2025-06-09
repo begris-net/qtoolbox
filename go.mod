@@ -14,7 +14,7 @@ require (
 	github.com/imroc/req/v3 v3.52.2
 	github.com/mariomac/gostream v0.8.1
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/pterm/pterm v0.12.80
+	github.com/pterm/pterm v0.12.81
 	github.com/spf13/cobra v1.9.1
 	golift.io/xtractr v0.2.2
 	gopkg.in/yaml.v3 v3.0.1
@@ -29,7 +29,7 @@ require (
 	github.com/bodgit/sevenzip v1.5.1 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
-	github.com/containerd/console v1.0.4 // indirect
+	github.com/containerd/console v1.0.5 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20250423184734-337e5dd93bb4 // indirect
@@ -58,13 +58,13 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/mock v0.5.1 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
-	golang.org/x/crypto v0.37.0 // indirect
+	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/exp v0.0.0-20241215155358-4a5509556b9e // indirect
-	golang.org/x/mod v0.24.0 // indirect
-	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/sync v0.13.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/term v0.31.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
-	golang.org/x/tools v0.32.0 // indirect
+	golang.org/x/mod v0.25.0 // indirect
+	golang.org/x/net v0.40.0 // indirect
+	golang.org/x/sync v0.15.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/term v0.32.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
+	golang.org/x/tools v0.33.0 // indirect
 )
