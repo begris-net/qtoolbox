@@ -1,6 +1,9 @@
 package stream
 
 import (
+	"iter"
+	"slices"
+
 	"github.com/mariomac/gostream/item"
 	"github.com/mariomac/gostream/order"
 )
@@ -11,10 +14,61 @@ func ForEach[T any](input Stream[T], consumer func(T)) {
 	input.ForEach(consumer)
 }
 
-func (bs *iterableStream[T]) ForEach(consumer func(T)) {
-	next := bs.iterator()
+func (is *iterableStream[T]) ForEach(consumer func(T)) {
+	next := is.iterator()
 	for in, ok := next(); ok; in, ok = next() {
 		consumer(in)
+	}
+}
+
+// Iter makes iterableStream compatible with Go's "for ... range" syntax.
+// It returns a function that can be used in range loops.
+// This function is equivalent to invoking the input.Iter method
+func Iter[T any](input Stream[T]) func(func(int, T) bool) {
+	return input.Iter()
+}
+
+func (is *iterableStream[T]) Iter() iter.Seq2[int, T] {
+	next := is.iterator()
+	return func(yield func(int, T) bool) {
+		idx := 0
+		for item, ok := next(); ok; item, ok = next() {
+			if !yield(idx, item) {
+				return
+			}
+			idx++
+		}
+	}
+}
+
+// Seq returns the input Stream[T] as a Go standard iter.Seq[T].
+// This function is equivalent to invoking the input.Seq() method
+func Seq[T any](input Stream[T]) iter.Seq[T] {
+	return input.Seq()
+}
+
+func (is *iterableStream[T]) Seq() iter.Seq[T] {
+	next := is.iterator()
+	return func(yield func(T) bool) {
+		for item, ok := next(); ok; item, ok = next() {
+			if !yield(item) {
+				return
+			}
+		}
+	}
+}
+
+// Seq2 returns the input Stream[item.Pair[K, V]] as a Go standard iter.Seq2[K,V].
+// Observe that this function will only work on Streams created from maps (or
+// explicitly created as streams of item.Pair[K, V])
+func Seq2[K comparable, V any](input Stream[item.Pair[K, V]]) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		next := input.iterator()
+		for item, ok := next(); ok; item, ok = next() {
+			if !yield(item.Key, item.Val) {
+				return
+			}
+		}
 	}
 }
 
@@ -24,15 +78,9 @@ func ToSlice[T any](input Stream[T]) []T {
 	return input.ToSlice()
 }
 
-func (st *iterableStream[T]) ToSlice() []T {
-	assertFinite[T](st)
-	// TODO: use "count" for better performance
-	res := []T{}
-	next := st.iterator()
-	for r, ok := next(); ok; r, ok = next() {
-		res = append(res, r)
-	}
-	return res
+func (is *iterableStream[T]) ToSlice() []T {
+	assertFinite[T](is)
+	return slices.Collect(is.Seq())
 }
 
 // ToMap returns a map Containing all the item.Pair elements of this Stream, where
