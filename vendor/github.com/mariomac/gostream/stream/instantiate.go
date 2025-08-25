@@ -1,6 +1,8 @@
 package stream
 
 import (
+	"iter"
+
 	"github.com/mariomac/gostream/item"
 )
 
@@ -35,7 +37,8 @@ func Generate[T any](supplier func() T) Stream[T] {
 			return func() (T, bool) {
 				return supplier(), true
 			}
-		}}
+		},
+	}
 }
 
 // Iterate returns an infinite sequential ordered Stream produced by iterative application of a function
@@ -54,7 +57,8 @@ func Iterate[T any](seed T, f func(T) T) Stream[T] {
 				lastElement = f(lastElement)
 				return i, true
 			}
-		}}
+		},
+	}
 }
 
 // Concat creates a lazily concatenated stream whose elements are all the elements of the first stream
@@ -123,6 +127,29 @@ func OfChannel[T any](source <-chan T) Stream[T] {
 			return func() (T, bool) {
 				v, ok := <-source
 				return v, ok
+			}
+		},
+	}
+}
+
+// OfSeq creates a Stream[T] from a standard iter.Seq[T] iterator
+func OfSeq[T any](source iter.Seq[T]) Stream[T] {
+	return &iterableStream[T]{
+		supply: func() iterator[T] {
+			pull, _ := iter.Pull(source)
+			return pull
+		},
+	}
+}
+
+// OfSeq2 creates a Stream[item.Pair[K, V]] from a standard iter.Seq2[K, V] iterator.
+func OfSeq2[K comparable, V any](source iter.Seq2[K, V]) Stream[item.Pair[K, V]] {
+	return &iterableStream[item.Pair[K, V]]{
+		supply: func() iterator[item.Pair[K, V]] {
+			pull, _ := iter.Pull2(source)
+			return func() (item.Pair[K, V], bool) {
+				k, v, ok := pull()
+				return item.Pair[K, V]{Key: k, Val: v}, ok
 			}
 		},
 	}

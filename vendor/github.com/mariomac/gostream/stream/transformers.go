@@ -1,6 +1,8 @@
 package stream
 
 import (
+	"slices"
+
 	"github.com/mariomac/gostream/order"
 )
 
@@ -25,8 +27,8 @@ func Map[IT, OT any](input Stream[IT], mapper func(IT) OT) Stream[OT] {
 	}
 }
 
-func (bs *iterableStream[T]) Map(mapper func(T) T) Stream[T] {
-	return Map[T, T](bs, mapper)
+func (is *iterableStream[T]) Map(mapper func(T) T) Stream[T] {
+	return Map[T, T](is, mapper)
 }
 
 // Filter returns a Stream consisting of the items of this stream that match the given
@@ -36,11 +38,11 @@ func Filter[T any](input Stream[T], predicate func(T) bool) Stream[T] {
 	return input.Filter(predicate)
 }
 
-func (as *iterableStream[T]) Filter(predicate func(T) bool) Stream[T] {
+func (is *iterableStream[T]) Filter(predicate func(T) bool) Stream[T] {
 	return &iterableStream[T]{
-		infinite: as.infinite,
+		infinite: is.infinite,
 		supply: func() iterator[T] {
-			next := as.iterator()
+			next := is.iterator()
 			return func() (T, bool) {
 				for {
 					n, ok := next()
@@ -53,7 +55,8 @@ func (as *iterableStream[T]) Filter(predicate func(T) bool) Stream[T] {
 					}
 				}
 			}
-		}}
+		},
+	}
 }
 
 // Limit returns a stream consisting of the elements of this stream, truncated to
@@ -63,11 +66,11 @@ func Limit[T any](input Stream[T], maxSize int) Stream[T] {
 	return input.Limit(maxSize)
 }
 
-func (as *iterableStream[T]) Limit(maxSize int) Stream[T] {
+func (is *iterableStream[T]) Limit(maxSize int) Stream[T] {
 	return &iterableStream[T]{
 		infinite: false,
 		supply: func() iterator[T] {
-			next := as.iterator()
+			next := is.iterator()
 			count := 0
 			return func() (T, bool) {
 				if count == maxSize {
@@ -83,7 +86,8 @@ func (as *iterableStream[T]) Limit(maxSize int) Stream[T] {
 				count++
 				return n, true
 			}
-		}}
+		},
+	}
 }
 
 // Distinct returns a stream consisting of the distinct elements (according to equality operator)
@@ -114,13 +118,14 @@ func Distinct[T comparable](input Stream[T]) Stream[T] {
 func Sorted[T any](input Stream[T], comparator order.Comparator[T]) Stream[T] {
 	return input.Sorted(comparator)
 }
+
 func (is *iterableStream[T]) Sorted(comparator order.Comparator[T]) Stream[T] {
 	assertFinite[T](is)
 	return &iterableStream[T]{
 		infinite: false,
 		supply: func() iterator[T] {
 			items := is.ToSlice()
-			order.SortSlice(items, comparator)
+			slices.SortFunc(items, comparator)
 			return func() (T, bool) {
 				if len(items) == 0 {
 					return finishedIterator[T]()
@@ -183,6 +188,7 @@ func (is *iterableStream[T]) FlatMap(mapper func(T) Stream[T]) Stream[T] {
 func Peek[T any](input Stream[T], consumer func(T)) Stream[T] {
 	return input.Peek(consumer)
 }
+
 func (is *iterableStream[T]) Peek(consumer func(T)) Stream[T] {
 	return &iterableStream[T]{
 		infinite: is.isInfinite(),
@@ -207,6 +213,7 @@ func (is *iterableStream[T]) Peek(consumer func(T)) Stream[T] {
 func Skip[T any](input Stream[T], n int) Stream[T] {
 	return input.Skip(n)
 }
+
 func (is *iterableStream[T]) Skip(n int) Stream[T] {
 	return &iterableStream[T]{
 		infinite: is.isInfinite(),

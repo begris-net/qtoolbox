@@ -4,6 +4,7 @@ package stream
 
 import (
 	"fmt"
+	"iter"
 
 	"github.com/mariomac/gostream/order"
 )
@@ -108,6 +109,20 @@ type Stream[T any] interface {
 
 	// ToSlice returns a Slice Containing all the elements of this Stream.
 	ToSlice() []T
+
+	// Iter makes the Stream compatible with Go's "for ... range" syntax.
+	// The returned `iter.Seq2` has two fields: the first is the index of the item within
+	// the stream, and the second is the item itself.
+	// To iterate map-like `stream.Stream[item.Pair[K, V]]`, you need to use the `stream.Seq2`
+	// helper function
+	Iter() iter.Seq2[int, T]
+
+	// Seq returns a Go standard iter.Seq[T] iterator type,
+	// allow using the Stream as an iterator that yields each element of this stream.
+	// It fulfills the standard iter.Seq[T] type definition and can be used with
+	// Go's "for ... range" syntax: for item := range stream.Seq() { ... }
+	// as well as other functions using the standard Go iter.Seq type.
+	Seq() iter.Seq[T]
 }
 
 // if there are more items to iterate, returns the next item and true.
@@ -123,7 +138,7 @@ func finishedIterator[T any]() (T, bool) {
 
 type iteratorSupplier[T any] func() iterator[T]
 
-// iterableStream is a generic stream that is iterated by the iterator returned by the
+// iterableStream is a generic stream iterated by the iterator returned by the
 // supplier function
 type iterableStream[T any] struct {
 	infinite bool
