@@ -128,7 +128,7 @@ github.com/hashicorp/golang-lru/v2/simplelru
 ## explicit; go 1.20
 github.com/icholy/digest
 github.com/icholy/digest/internal/param
-# github.com/imroc/req/v3 v3.54.2
+# github.com/imroc/req/v3 v3.55.0
 ## explicit; go 1.24
 github.com/imroc/req/v3
 github.com/imroc/req/v3/http2
