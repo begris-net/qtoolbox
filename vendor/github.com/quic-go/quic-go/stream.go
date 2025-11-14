@@ -9,6 +9,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/flowcontrol"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -71,6 +72,7 @@ func newStream(
 	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
+	supportsResetStreamAt bool,
 ) *Stream {
 	s := &Stream{sender: sender}
 	senderForSendStream := &uniStreamSender{
@@ -85,7 +87,7 @@ func newStream(
 			sender.onHasStreamControlFrame(streamID, s)
 		},
 	}
-	s.sendStr = newSendStream(ctx, streamID, senderForSendStream, flowController)
+	s.sendStr = newSendStream(ctx, streamID, senderForSendStream, flowController, supportsResetStreamAt)
 	senderForReceiveStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {
@@ -146,11 +148,11 @@ func (s *Stream) Close() error {
 	return s.sendStr.Close()
 }
 
-func (s *Stream) handleResetStreamFrame(frame *wire.ResetStreamFrame, rcvTime time.Time) error {
+func (s *Stream) handleResetStreamFrame(frame *wire.ResetStreamFrame, rcvTime monotime.Time) error {
 	return s.receiveStr.handleResetStreamFrame(frame, rcvTime)
 }
 
-func (s *Stream) handleStreamFrame(frame *wire.StreamFrame, rcvTime time.Time) error {
+func (s *Stream) handleStreamFrame(frame *wire.StreamFrame, rcvTime monotime.Time) error {
 	return s.receiveStr.handleStreamFrame(frame, rcvTime)
 }
 
@@ -162,11 +164,15 @@ func (s *Stream) updateSendWindow(limit protocol.ByteCount) {
 	s.sendStr.updateSendWindow(limit)
 }
 
+func (s *Stream) enableResetStreamAt() {
+	s.sendStr.enableResetStreamAt()
+}
+
 func (s *Stream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMore bool) {
 	return s.sendStr.popStreamFrame(maxBytes, v)
 }
 
-func (s *Stream) getControlFrame(now time.Time) (_ ackhandler.Frame, ok, hasMore bool) {
+func (s *Stream) getControlFrame(now monotime.Time) (_ ackhandler.Frame, ok, hasMore bool) {
 	f, ok, _ := s.sendStr.getControlFrame(now)
 	if ok {
 		return f, true, true

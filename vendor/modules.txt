@@ -44,48 +44,6 @@ github.com/bodgit/sevenzip/internal/zstd
 # github.com/bodgit/windows v1.0.1
 ## explicit; go 1.13
 github.com/bodgit/windows
-# github.com/cloudflare/circl v1.6.1
-## explicit; go 1.22.0
-github.com/cloudflare/circl/dh/x25519
-github.com/cloudflare/circl/dh/x448
-github.com/cloudflare/circl/ecc/goldilocks
-github.com/cloudflare/circl/hpke
-github.com/cloudflare/circl/internal/conv
-github.com/cloudflare/circl/internal/sha3
-github.com/cloudflare/circl/kem
-github.com/cloudflare/circl/kem/kyber/kyber768
-github.com/cloudflare/circl/kem/mlkem/mlkem768
-github.com/cloudflare/circl/kem/xwing
-github.com/cloudflare/circl/math
-github.com/cloudflare/circl/math/fp25519
-github.com/cloudflare/circl/math/fp448
-github.com/cloudflare/circl/math/mlsbset
-github.com/cloudflare/circl/pke/kyber/internal/common
-github.com/cloudflare/circl/pke/kyber/internal/common/params
-github.com/cloudflare/circl/pke/kyber/kyber768
-github.com/cloudflare/circl/pke/kyber/kyber768/internal
-github.com/cloudflare/circl/pki
-github.com/cloudflare/circl/sign
-github.com/cloudflare/circl/sign/dilithium/mode2
-github.com/cloudflare/circl/sign/dilithium/mode2/internal
-github.com/cloudflare/circl/sign/dilithium/mode3
-github.com/cloudflare/circl/sign/dilithium/mode3/internal
-github.com/cloudflare/circl/sign/dilithium/mode5
-github.com/cloudflare/circl/sign/dilithium/mode5/internal
-github.com/cloudflare/circl/sign/ed25519
-github.com/cloudflare/circl/sign/ed448
-github.com/cloudflare/circl/sign/eddilithium2
-github.com/cloudflare/circl/sign/eddilithium3
-github.com/cloudflare/circl/sign/internal/dilithium
-github.com/cloudflare/circl/sign/internal/dilithium/params
-github.com/cloudflare/circl/sign/mldsa/mldsa44
-github.com/cloudflare/circl/sign/mldsa/mldsa44/internal
-github.com/cloudflare/circl/sign/mldsa/mldsa65
-github.com/cloudflare/circl/sign/mldsa/mldsa65/internal
-github.com/cloudflare/circl/sign/mldsa/mldsa87
-github.com/cloudflare/circl/sign/mldsa/mldsa87/internal
-github.com/cloudflare/circl/sign/schemes
-github.com/cloudflare/circl/simd/keccakf1600
 # github.com/codeclysm/extract/v4 v4.0.0
 ## explicit; go 1.22
 github.com/codeclysm/extract/v4
@@ -128,8 +86,8 @@ github.com/hashicorp/golang-lru/v2/simplelru
 ## explicit; go 1.20
 github.com/icholy/digest
 github.com/icholy/digest/internal/param
-# github.com/imroc/req/v3 v3.55.0
-## explicit; go 1.24
+# github.com/imroc/req/v3 v3.56.0
+## explicit; go 1.24.0
 github.com/imroc/req/v3
 github.com/imroc/req/v3/http2
 github.com/imroc/req/v3/internal
@@ -160,8 +118,8 @@ github.com/juju/errors
 # github.com/kdomanski/iso9660 v0.4.0
 ## explicit; go 1.19
 github.com/kdomanski/iso9660
-# github.com/klauspost/compress v1.18.0
-## explicit; go 1.22
+# github.com/klauspost/compress v1.18.1
+## explicit; go 1.23
 github.com/klauspost/compress
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/fse
@@ -202,22 +160,26 @@ github.com/pterm/pterm/internal
 # github.com/quic-go/qpack v0.5.1
 ## explicit; go 1.22
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.53.0
-## explicit; go 1.23
+# github.com/quic-go/quic-go v0.56.0
+## explicit; go 1.24
 github.com/quic-go/quic-go
+github.com/quic-go/quic-go/http3/qlog
 github.com/quic-go/quic-go/internal/ackhandler
 github.com/quic-go/quic-go/internal/congestion
 github.com/quic-go/quic-go/internal/flowcontrol
 github.com/quic-go/quic-go/internal/handshake
+github.com/quic-go/quic-go/internal/monotime
 github.com/quic-go/quic-go/internal/protocol
 github.com/quic-go/quic-go/internal/qerr
 github.com/quic-go/quic-go/internal/utils
 github.com/quic-go/quic-go/internal/utils/linkedlist
 github.com/quic-go/quic-go/internal/utils/ringbuffer
 github.com/quic-go/quic-go/internal/wire
-github.com/quic-go/quic-go/logging
+github.com/quic-go/quic-go/qlog
+github.com/quic-go/quic-go/qlogwriter
+github.com/quic-go/quic-go/qlogwriter/jsontext
 github.com/quic-go/quic-go/quicvarint
-# github.com/refraction-networking/utls v1.7.3
+# github.com/refraction-networking/utls v1.8.1
 ## explicit; go 1.24
 github.com/refraction-networking/utls
 github.com/refraction-networking/utls/dicttls
@@ -249,16 +211,12 @@ github.com/ulikunitz/xz/lzma
 # github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
 ## explicit; go 1.19
 github.com/xo/terminfo
-# go.uber.org/mock v0.5.2
-## explicit; go 1.23
-go.uber.org/mock/mockgen
-go.uber.org/mock/mockgen/model
 # go4.org v0.0.0-20230225012048-214862532bf5
 ## explicit; go 1.13
 go4.org/readerutil
 go4.org/syncutil
-# golang.org/x/crypto v0.41.0
-## explicit; go 1.23.0
+# golang.org/x/crypto v0.44.0
+## explicit; go 1.24.0
 golang.org/x/crypto/chacha20
 golang.org/x/crypto/chacha20poly1305
 golang.org/x/crypto/cryptobyte
@@ -270,14 +228,8 @@ golang.org/x/crypto/sha3
 # golang.org/x/exp v0.0.0-20250811191247-51f88131bc50
 ## explicit; go 1.23.0
 golang.org/x/exp/constraints
-# golang.org/x/mod v0.27.0
-## explicit; go 1.23.0
-golang.org/x/mod/internal/lazyregexp
-golang.org/x/mod/modfile
-golang.org/x/mod/module
-golang.org/x/mod/semver
-# golang.org/x/net v0.43.0
-## explicit; go 1.23.0
+# golang.org/x/net v0.47.0
+## explicit; go 1.24.0
 golang.org/x/net/bpf
 golang.org/x/net/html
 golang.org/x/net/html/atom
@@ -290,20 +242,17 @@ golang.org/x/net/internal/socket
 golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/publicsuffix
-# golang.org/x/sync v0.16.0
-## explicit; go 1.23.0
-golang.org/x/sync/errgroup
-# golang.org/x/sys v0.35.0
-## explicit; go 1.23.0
+# golang.org/x/sys v0.38.0
+## explicit; go 1.24.0
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/term v0.34.0
-## explicit; go 1.23.0
+# golang.org/x/term v0.37.0
+## explicit; go 1.24.0
 golang.org/x/term
-# golang.org/x/text v0.28.0
-## explicit; go 1.23.0
+# golang.org/x/text v0.31.0
+## explicit; go 1.24.0
 golang.org/x/text/cases
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap
@@ -327,30 +276,6 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# golang.org/x/tools v0.36.0
-## explicit; go 1.23.0
-golang.org/x/tools/go/ast/astutil
-golang.org/x/tools/go/gcexportdata
-golang.org/x/tools/go/packages
-golang.org/x/tools/go/types/objectpath
-golang.org/x/tools/go/types/typeutil
-golang.org/x/tools/imports
-golang.org/x/tools/internal/aliases
-golang.org/x/tools/internal/event
-golang.org/x/tools/internal/event/core
-golang.org/x/tools/internal/event/keys
-golang.org/x/tools/internal/event/label
-golang.org/x/tools/internal/gcimporter
-golang.org/x/tools/internal/gocommand
-golang.org/x/tools/internal/gopathwalk
-golang.org/x/tools/internal/imports
-golang.org/x/tools/internal/modindex
-golang.org/x/tools/internal/packagesinternal
-golang.org/x/tools/internal/pkgbits
-golang.org/x/tools/internal/stdlib
-golang.org/x/tools/internal/typeparams
-golang.org/x/tools/internal/typesinternal
-golang.org/x/tools/internal/versions
 # golift.io/xtractr v0.2.2
 ## explicit; go 1.19
 golift.io/xtractr
