@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/quic-go/quic-go/internal/flowcontrol"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -30,12 +30,13 @@ type streamsMap struct {
 	queueControlFrame func(wire.Frame)
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController
 
-	mutex               sync.Mutex
-	outgoingBidiStreams *outgoingStreamsMap[*Stream]
-	outgoingUniStreams  *outgoingStreamsMap[*SendStream]
-	incomingBidiStreams *incomingStreamsMap[*Stream]
-	incomingUniStreams  *incomingStreamsMap[*ReceiveStream]
-	reset               bool
+	mutex                 sync.Mutex
+	outgoingBidiStreams   *outgoingStreamsMap[*Stream]
+	outgoingUniStreams    *outgoingStreamsMap[*SendStream]
+	incomingBidiStreams   *incomingStreamsMap[*Stream]
+	incomingUniStreams    *incomingStreamsMap[*ReceiveStream]
+	reset                 bool
+	supportsResetStreamAt bool
 }
 
 func newStreamsMap(
@@ -64,7 +65,7 @@ func (m *streamsMap) initMaps() {
 	m.outgoingBidiStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeBidi,
 		func(id protocol.StreamID) *Stream {
-			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
+			return newStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt)
 		},
 		m.queueControlFrame,
 		m.perspective,
@@ -72,7 +73,7 @@ func (m *streamsMap) initMaps() {
 	m.incomingBidiStreams = newIncomingStreamsMap(
 		protocol.StreamTypeBidi,
 		func(id protocol.StreamID) *Stream {
-			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
+			return newStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt)
 		},
 		m.maxIncomingBidiStreams,
 		m.queueControlFrame,
@@ -81,7 +82,7 @@ func (m *streamsMap) initMaps() {
 	m.outgoingUniStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeUni,
 		func(id protocol.StreamID) *SendStream {
-			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id))
+			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt)
 		},
 		m.queueControlFrame,
 		m.perspective,
@@ -250,8 +251,8 @@ func (m *streamsMap) HandleStopSendingFrame(f *wire.StopSendingFrame) error {
 }
 
 type receiveStreamFrameHandler interface {
-	handleResetStreamFrame(*wire.ResetStreamFrame, time.Time) error
-	handleStreamFrame(*wire.StreamFrame, time.Time) error
+	handleResetStreamFrame(*wire.ResetStreamFrame, monotime.Time) error
+	handleStreamFrame(*wire.StreamFrame, monotime.Time) error
 }
 
 func (m *streamsMap) getReceiveStream(id protocol.StreamID) (receiveStreamFrameHandler, error) {
@@ -294,7 +295,7 @@ func (m *streamsMap) HandleStreamDataBlockedFrame(f *wire.StreamDataBlockedFrame
 	return nil // we don't need to do anything in response to a STREAM_DATA_BLOCKED frame
 }
 
-func (m *streamsMap) HandleResetStreamFrame(f *wire.ResetStreamFrame, rcvTime time.Time) error {
+func (m *streamsMap) HandleResetStreamFrame(f *wire.ResetStreamFrame, rcvTime monotime.Time) error {
 	str, err := m.getReceiveStream(f.StreamID)
 	if err != nil {
 		return err
@@ -305,7 +306,7 @@ func (m *streamsMap) HandleResetStreamFrame(f *wire.ResetStreamFrame, rcvTime ti
 	return str.handleResetStreamFrame(f, rcvTime)
 }
 
-func (m *streamsMap) HandleStreamFrame(f *wire.StreamFrame, rcvTime time.Time) error {
+func (m *streamsMap) HandleStreamFrame(f *wire.StreamFrame, rcvTime monotime.Time) error {
 	str, err := m.getReceiveStream(f.StreamID)
 	if err != nil {
 		return err
@@ -316,7 +317,10 @@ func (m *streamsMap) HandleStreamFrame(f *wire.StreamFrame, rcvTime time.Time) e
 	return str.handleStreamFrame(f, rcvTime)
 }
 
-func (m *streamsMap) UpdateLimits(p *wire.TransportParameters) {
+func (m *streamsMap) HandleTransportParameters(p *wire.TransportParameters) {
+	m.supportsResetStreamAt = p.EnableResetStreamAt
+	m.outgoingBidiStreams.EnableResetStreamAt()
+	m.outgoingUniStreams.EnableResetStreamAt()
 	m.outgoingBidiStreams.UpdateSendWindow(p.InitialMaxStreamDataBidiRemote)
 	m.outgoingBidiStreams.SetMaxStream(p.MaxBidiStreamNum.StreamID(protocol.StreamTypeBidi, m.perspective))
 	m.outgoingUniStreams.UpdateSendWindow(p.InitialMaxStreamDataUni)
