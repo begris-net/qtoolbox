@@ -10,7 +10,7 @@ require (
 	github.com/codeclysm/extract/v4 v4.0.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/google/go-github/v57 v57.0.0
-	github.com/hashicorp/go-version v1.7.0
+	github.com/hashicorp/go-version v1.8.0
 	github.com/imroc/req/v3 v3.56.0
 	github.com/mariomac/gostream v0.10.1
 	github.com/mitchellh/go-homedir v1.1.0
