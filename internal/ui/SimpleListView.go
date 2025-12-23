@@ -23,6 +23,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/YoshikiShibata/gostream"
 	"github.com/begris-net/qtoolbox/internal/util"
 	"github.com/pterm/pterm"
 	"math"
@@ -31,6 +32,7 @@ import (
 
 type ViewItem struct {
 	Header   string
+	Default  ViewElement
 	Elements []ViewElement
 }
 
@@ -105,7 +107,15 @@ func (v *ViewItem) generateRows() [][]string {
 }
 
 func (v *ViewItem) renderHeader() string {
-	return fmt.Sprintf("%s\n%s\n%s\n", vertical_separator, v.Header, vertical_separator)
+	var currentDefaultVersion string
+	gostream.Of(v.Elements...).Filter(func(t ViewElement) bool {
+		return t.Default
+	}).FindAny().IfPresentOrElse(func(t ViewElement) {
+		currentDefaultVersion = t.Name
+	}, func() {
+		currentDefaultVersion = "n/a"
+	})
+	return fmt.Sprintf("%s\n%-46s Current version: %s\n%s\n", vertical_separator, v.Header, currentDefaultVersion, vertical_separator)
 }
 
 func (e ViewElement) renderViewElement() string {
