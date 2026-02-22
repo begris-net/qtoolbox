@@ -25,6 +25,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"regexp"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/BooleanCat/go-functional/iter"
 	"github.com/YoshikiShibata/gostream"
 	"github.com/begris-net/qtoolbox/internal/cache"
@@ -35,12 +42,6 @@ import (
 	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/begris-net/qtoolbox/internal/util"
 	"github.com/google/go-github/v57/github"
-	"net/url"
-	"regexp"
-	"runtime"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type GithubDistribution struct {
@@ -56,12 +57,26 @@ func (d *GithubDistribution) getCachedReleases(provider candidate.CandidateProvi
 	refresh := func() []*github.RepositoryRelease {
 		repo := strings.Split(provider.Endpoint, "/")
 		client := github.NewClient(nil)
-		releases, _, err := client.Repositories.ListReleases(context.Background(),
+		releases, response, err := client.Repositories.ListReleases(context.Background(),
 			repo[0], repo[1], &github.ListOptions{PerPage: d.pageSize})
 
 		if err != nil {
 			panic(err)
 		}
+
+		if response.LastPage > response.FirstPage && len(releases) < provider.MaxReleases {
+			maxPage := response.LastPage
+			log.Logger.Debug(fmt.Sprintf("Additional pages for releases available: %d pages, fetching a maximum of %d releases.", maxPage, provider.MaxReleases))
+			for page := 2; page <= maxPage && len(releases) < provider.MaxReleases; page++ {
+				releasesAdditional, _, err := client.Repositories.ListReleases(context.Background(),
+					repo[0], repo[1], &github.ListOptions{PerPage: d.pageSize, Page: page})
+				if err != nil {
+					panic(err)
+				}
+				releases = append(releases, releasesAdditional...)
+			}
+		}
+
 		return releases
 	}
 

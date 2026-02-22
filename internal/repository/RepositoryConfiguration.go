@@ -22,9 +22,10 @@
 package repository
 
 import (
+	"os"
+
 	"github.com/begris-net/qtoolbox/internal/types"
 	"gopkg.in/yaml.v3"
-	"os"
 )
 
 type Repository struct {
@@ -48,6 +49,7 @@ type ProviderInfo struct {
 	Endpoint       string             `yaml:"endpoint"`
 	PreReleases    bool               `yaml:"pre-releases,omitempty"`
 	VersionCleanup string             `yaml:"version-cleanup"`
+	MaxReleases    int                `yaml:"max-releases,omitempty"`
 	Settings       map[string]any     `yaml:"settings,omitempty"`
 }
 

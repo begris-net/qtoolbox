@@ -259,6 +259,7 @@ candidates:
       kubectl-github:
         type: GitHubTagsDownloadUrl
         endpoint: kubernetes/kubernetes # org-id/repo
+        max-releases: 250
         version-cleanup: ^[[:alpha:]]+\s #regex to clean up version string, currently only supported by github based providers
         settings:
           url: https://dl.k8s.io/release/{{.Version}}/bin/{{.OS}}/{{.Arch}}/kubectl{{.OSArchiveExt}} # {{.OSArchiveExt}} includes the `.` dot before the extension
@@ -328,6 +329,7 @@ candidates:
         type: GitHubTagsDownloadUrl
         endpoint: okd-project/okd
         #pre-releases: true #default: false
+        max-releases: 250
         settings:
           url: https://github.com/okd-project/okd/releases/download/{{.Version}}/openshift-client-{{.OS}}{{ if ("" | ne .Arch) }}-{{.Arch}}{{ end }}-{{.Version}}.{{.OSArchiveExt}}
           os-mapping:

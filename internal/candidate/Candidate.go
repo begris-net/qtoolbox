@@ -23,14 +23,15 @@ package candidate
 
 import (
 	"fmt"
-	"github.com/begris-net/qtoolbox/internal/types"
-	"github.com/begris-net/qtoolbox/internal/util"
-	"github.com/hashicorp/go-version"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/begris-net/qtoolbox/internal/types"
+	"github.com/begris-net/qtoolbox/internal/util"
+	"github.com/hashicorp/go-version"
 )
 
 type Candidate struct {
@@ -50,6 +51,7 @@ type CandidateProvider struct {
 	Type                 types.ProviderType
 	Endpoint             string
 	PreRelease           bool
+	MaxReleases          int
 	VersionCleanupRegex  *regexp.Regexp
 	Settings             map[string]any
 	InstallationBasePath string
