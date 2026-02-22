@@ -23,6 +23,8 @@ package repository
 
 import (
 	"fmt"
+	"regexp"
+
 	"github.com/YoshikiShibata/gostream"
 	"github.com/begris-net/qtoolbox/internal/candidate"
 	"github.com/begris-net/qtoolbox/internal/config"
@@ -30,7 +32,6 @@ import (
 	candidateProvider "github.com/begris-net/qtoolbox/internal/provider"
 	"github.com/mariomac/gostream/stream"
 	"github.com/pterm/pterm"
-	"regexp"
 )
 
 var repository *Repository
@@ -94,6 +95,7 @@ func (repository *Repository) FetchCandidateProvider(candidateName string) (
 			Type:                 t.Type,
 			Endpoint:             t.Endpoint,
 			PreRelease:           t.PreReleases,
+			MaxReleases:          t.MaxReleases,
 			VersionCleanupRegex:  regexp.MustCompile(t.VersionCleanup),
 			Settings:             t.Settings,
 			InstallationBasePath: candidateInstallationBasePath,

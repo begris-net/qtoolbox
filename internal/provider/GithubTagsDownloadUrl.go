@@ -24,6 +24,14 @@ package provider
 import (
 	"context"
 	"fmt"
+	"html/template"
+	"net/url"
+	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/BooleanCat/go-functional/iter"
 	"github.com/begris-net/qtoolbox/internal/cache"
 	"github.com/begris-net/qtoolbox/internal/candidate"
@@ -33,13 +41,6 @@ import (
 	"github.com/begris-net/qtoolbox/internal/types"
 	"github.com/begris-net/qtoolbox/internal/util"
 	"github.com/google/go-github/v57/github"
-	"html/template"
-	"net/url"
-	"reflect"
-	"runtime"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type GitHubTagsDownloadUrl struct {
@@ -55,12 +56,25 @@ func (d *GitHubTagsDownloadUrl) getCachedReleases(provider candidate.CandidatePr
 	refresh := func() []*github.RepositoryRelease {
 		repo := strings.Split(provider.Endpoint, "/")
 		client := github.NewClient(nil)
-		releases, _, err := client.Repositories.ListReleases(context.Background(),
+		releases, response, err := client.Repositories.ListReleases(context.Background(),
 			repo[0], repo[1], &github.ListOptions{PerPage: d.pageSize})
 
 		if err != nil {
 			panic(err)
 		}
+		if response.LastPage > response.FirstPage && len(releases) < provider.MaxReleases {
+			maxPage := response.LastPage
+			log.Logger.Debug(fmt.Sprintf("Additional pages for releases available: %d pages, fetching a maximum of %d releases.", maxPage, provider.MaxReleases))
+			for page := 2; page <= maxPage && len(releases) < provider.MaxReleases; page++ {
+				releasesAdditional, _, err := client.Repositories.ListReleases(context.Background(),
+					repo[0], repo[1], &github.ListOptions{PerPage: d.pageSize, Page: page})
+				if err != nil {
+					panic(err)
+				}
+				releases = append(releases, releasesAdditional...)
+			}
+		}
+
 		return releases
 	}
 
@@ -70,8 +84,10 @@ func (d *GitHubTagsDownloadUrl) getCachedReleases(provider candidate.CandidatePr
 func (d *GitHubTagsDownloadUrl) UpdateProviderSettings(settings types.ProviderSettings) {
 	pageSize, err := strconv.Atoi(settings.Setting["page-size"])
 	if err == nil {
+		log.Logger.Debug(fmt.Sprintf("Using page size of %d", pageSize))
 		d.pageSize = pageSize
 	} else {
+		log.Logger.Debug(fmt.Sprintf("invalid page size, using default size of %d", 100))
 		d.pageSize = 100
 	}
 	ttl, err := time.ParseDuration(settings.Setting["version-cache-ttl"])
