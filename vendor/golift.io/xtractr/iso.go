@@ -10,14 +10,18 @@ import (
 )
 
 // ExtractISO writes an ISO's contents to disk.
-func ExtractISO(xFile *XFile) (int64, []string, error) {
-	openISO, err := os.Open(xFile.FilePath)
+func ExtractISO(xFile *XFile) (size uint64, filesList []string, err error) {
+	openISO, err := os.Open(xFile.FilePath) // os.Open on purpose.
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to open iso file: %s: %w", xFile.FilePath, err)
+		return 0, nil, fmt.Errorf("os.Open: %w", err)
 	}
 	defer openISO.Close()
 
-	iso, err := iso9660.OpenImage(openISO)
+	image, _ := iso9660.OpenImage(openISO)
+
+	defer xFile.newProgress(getUncompressedIsoSize(image)).done()
+
+	iso, err := iso9660.OpenImage(xFile.prog.readAter(openISO))
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to open iso image: %s: %w", xFile.FilePath, err)
 	}
@@ -35,8 +39,41 @@ func ExtractISO(xFile *XFile) (int64, []string, error) {
 	return size, files, nil
 }
 
-func (x *XFile) uniso(isoFile *iso9660.File, parent string) (int64, []string, error) {
+//nolint:unparam // so we can pass it in.
+func getUncompressedIsoSize(image *iso9660.Image) (total, _ uint64, count int) {
+	if image == nil {
+		return total, 0, count
+	}
+
+	var loop func(isoFile *iso9660.File)
+
+	loop = func(isoFile *iso9660.File) {
+		count++
+
+		children, err := isoFile.GetChildren()
+		if err != nil {
+			return
+		}
+
+		for _, child := range children {
+			total += uint64(child.Size())
+			loop(child)
+		}
+	}
+
+	root, err := image.RootDir()
+	if err != nil {
+		return total, 0, count
+	}
+
+	loop(root)
+
+	return total, 0, count
+}
+
+func (x *XFile) uniso(isoFile *iso9660.File, parent string) (uint64, []string, error) {
 	itemName := filepath.Join(parent, isoFile.Name())
+
 	if isoFile.Name() == string([]byte{0}) { // rename root folder.
 		itemName = strings.TrimSuffix(strings.TrimSuffix(filepath.Base(x.FilePath), ".iso"), ".ISO")
 	}
@@ -45,13 +82,18 @@ func (x *XFile) uniso(isoFile *iso9660.File, parent string) (int64, []string, er
 		return x.unisofile(isoFile, itemName)
 	}
 
+	err := x.mkDir(filepath.Join(x.OutputDir, itemName), isoFile.Mode(), isoFile.ModTime())
+	if err != nil {
+		return 0, nil, fmt.Errorf("making iso directory %s: %w", isoFile.Name(), err)
+	}
+
 	children, err := isoFile.GetChildren()
 	if err != nil {
 		return 0, nil, fmt.Errorf("getting children for %s: %w", isoFile.Name(), err)
 	}
 
 	files := []string{}
-	size := int64(0)
+	size := uint64(0)
 
 	for _, child := range children {
 		childSize, childFiles, err := x.uniso(child, itemName)
@@ -64,19 +106,32 @@ func (x *XFile) uniso(isoFile *iso9660.File, parent string) (int64, []string, er
 		files = append(files, childFiles...)
 	}
 
-	return size, files, nil
+	files, err = x.cleanup(files)
+
+	return size, files, err
 }
 
-func (x *XFile) unisofile(isoFile *iso9660.File, fileName string) (int64, []string, error) {
-	destFile := x.clean(fileName)
-	//nolint:gocritic // this 1-argument filepath.Join removes a ./ prefix should there be one.
-	if !strings.HasPrefix(destFile, filepath.Join(x.OutputDir)) {
-		// The file being written is trying to write outside of our base path. Malicious ISO?
-		return 0, nil, fmt.Errorf("%s: %w: %s != %s (from: %s)",
-			x.FilePath, ErrInvalidPath, destFile, x.OutputDir, isoFile.Name())
+func (x *XFile) unisofile(isoFile *iso9660.File, wfile string) (uint64, []string, error) {
+	file := &file{
+		Path:     x.clean(wfile),
+		Data:     isoFile.Reader(),
+		FileMode: isoFile.Mode(),
+		DirMode:  x.DirMode,
+		Mtime:    isoFile.ModTime(),
 	}
 
-	size, err := writeFile(destFile, isoFile.Reader(), x.FileMode, x.DirMode)
+	//nolint:gocritic // this 1-argument filepath.Join removes a ./ prefix should there be one.
+	if !strings.HasPrefix(file.Path, filepath.Join(x.OutputDir)) {
+		// The file being written is trying to write outside of our base path. Malicious ISO?
+		return 0, nil, fmt.Errorf("%s: %w: %s != %s (from: %s)",
+			x.FilePath, ErrInvalidPath, file.Path, x.OutputDir, isoFile.Name())
+	}
 
-	return size, []string{destFile}, err
+	x.Debugf("Writing archived file: %s (bytes: %d)", file.Path, isoFile.Size())
+
+	size, err := x.write(file)
+	x.Debugf("Wrote archived file: %s (%d bytes), total: %d files and %d bytes",
+		file.Path, size, x.prog.Files, int64(x.prog.Wrote))
+
+	return size, []string{file.Path}, err
 }

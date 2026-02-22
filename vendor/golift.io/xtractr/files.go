@@ -5,11 +5,100 @@ package xtractr
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"time"
 )
+
+// ArchiveList is the value returned when searching for compressed files.
+// The map is directory to list of archives in that directory.
+type ArchiveList map[string][]string
+
+type archive struct {
+	// Extension is passed to strings.HasSuffix.
+	Extension string
+	// Extract function for this extension.
+	Extract Interface
+}
+
+// Interface is a common interface for extracting compressed or non-compressed files or archives.
+type Interface func(x *XFile) (size uint64, filesList, archiveList []string, err error)
+
+// https://github.com/golift/xtractr/issues/44
+//
+// This list of archive types is used in a few places as extension lists.
+//
+//nolint:gochecknoglobals
+var extension2function = []archive{
+	{Extension: ".tar.bz2", Extract: ChngInt(ExtractTarBzip)},
+	{Extension: ".cpio.gz", Extract: ChngInt(ExtractCPIOGzip)},
+	{Extension: ".tar.gz", Extract: ChngInt(ExtractTarGzip)},
+	{Extension: ".tar.xz", Extract: ChngInt(ExtractTarXZ)},
+	{Extension: ".tar.z", Extract: ChngInt(ExtractTarZ)},
+	// The ones with double extensions that match a single (below) need to come first.
+	{Extension: ".7z", Extract: Extract7z},
+	{Extension: ".7z.001", Extract: Extract7z},
+	{Extension: ".ar", Extract: ChngInt(ExtractAr)},
+	{Extension: ".br", Extract: ChngInt(ExtractBrotli)},
+	{Extension: ".brotli", Extract: ChngInt(ExtractBrotli)},
+	{Extension: ".bz2", Extract: ChngInt(ExtractBzip)},
+	{Extension: ".cpgz", Extract: ChngInt(ExtractCPIOGzip)},
+	{Extension: ".cpio", Extract: ChngInt(ExtractCPIO)},
+	{Extension: ".deb", Extract: ChngInt(ExtractAr)},
+	{Extension: ".gz", Extract: ChngInt(ExtractGzip)},
+	{Extension: ".gzip", Extract: ChngInt(ExtractGzip)},
+	{Extension: ".iso", Extract: ChngInt(ExtractISO)},
+	{Extension: ".lz4", Extract: ChngInt(ExtractLZ4)},
+	{Extension: ".lz", Extract: ChngInt(ExtractLZMA)},
+	{Extension: ".lzip", Extract: ChngInt(ExtractLZMA)},
+	{Extension: ".lzma", Extract: ChngInt(ExtractLZMA)},
+	{Extension: ".lzma2", Extract: ChngInt(ExtractLZMA2)},
+	{Extension: ".r00", Extract: ExtractRAR},
+	{Extension: ".rar", Extract: ExtractRAR},
+	{Extension: ".s2", Extract: ChngInt(ExtractS2)},
+	{Extension: ".rpm", Extract: ChngInt(ExtractRPM)},
+	{Extension: ".snappy", Extract: ChngInt(ExtractSnappy)},
+	{Extension: ".sz", Extract: ChngInt(ExtractSnappy)},
+	{Extension: ".tar", Extract: ChngInt(ExtractTar)},
+	{Extension: ".tbz", Extract: ChngInt(ExtractTarBzip)},
+	{Extension: ".tbz2", Extract: ChngInt(ExtractTarBzip)},
+	{Extension: ".tgz", Extract: ChngInt(ExtractTarGzip)},
+	{Extension: ".tlz", Extract: ChngInt(ExtractTarLzip)},
+	{Extension: ".txz", Extract: ChngInt(ExtractTarXZ)},
+	{Extension: ".tz", Extract: ChngInt(ExtractTarZ)},
+	{Extension: ".xz", Extract: ChngInt(ExtractXZ)},
+	{Extension: ".z", Extract: ChngInt(ExtractLZW)}, // everything is lowercase...
+	{Extension: ".zip", Extract: ChngInt(ExtractZIP)},
+	{Extension: ".zlib", Extract: ChngInt(ExtractZlib)},
+	{Extension: ".zst", Extract: ChngInt(ExtractZstandard)},
+	{Extension: ".zstd", Extract: ChngInt(ExtractZstandard)},
+	{Extension: ".zz", Extract: ChngInt(ExtractZlib)},
+}
+
+// ChngInt converts the smaller return interface into an ExtractInterface.
+// Functions with multi-part archive files return four values. Other functions return only 3.
+// This ChngInt function makes both interfaces compatible.
+func ChngInt(smallFn func(*XFile) (uint64, []string, error)) Interface {
+	return func(xFile *XFile) (uint64, []string, []string, error) {
+		size, files, err := smallFn(xFile)
+		return size, files, []string{xFile.FilePath}, err
+	}
+}
+
+// SupportedExtensions returns a slice of file extensions this library recognizes.
+func SupportedExtensions() []string {
+	exts := make([]string, len(extension2function))
+
+	for idx, ext := range extension2function {
+		exts[idx] = ext.Extension
+	}
+
+	return exts
+}
 
 // XFile defines the data needed to extract an archive.
 type XFile struct {
@@ -25,31 +114,71 @@ type XFile struct {
 	Password string
 	// (RAR/7z) Archive passwords (to try multiple).
 	Passwords []string
+	// Progress is called periodically during file extraction.
+	// Contains info about the progress of the extraction.
+	// This is not called if an Updates channel is also provided.
+	Progress func(Progress)
+	// If an Updates channel is provided, all Progress updates are sent to it.
+	// Contains info about the progress of the extraction.
+	Updates chan Progress
+	// If the archive only has one directory in the root, then setting
+	// this true will cause the extracted content to be moved into the
+	// output folder, and the root folder in the archive to be removed.
+	SquashRoot bool
+	// Logger allows printing debug messages.
+	log       Logger
+	moveFiles func(fromPath, toPath string, overwrite bool) ([]string, error)
+	prog      *Progress
 }
 
 // Filter is the input to find compressed files.
 type Filter struct {
 	// This is the path to search in for archives.
 	Path string
-	// Any files with this suffix are ignored. ie. ".7z" or ."iso"
+	// Any files with this suffix are ignored. ie. ".7z" or ".iso"
+	// Use the AllExcept func to create an inclusion list instead.
 	ExcludeSuffix Exclude
+	// Count of folder depth allowed when finding archives. 1 = root
+	MaxDepth int
+	// Only find archives this many child-folders deep. 0 and 1 are equal.
+	MinDepth int
 }
 
 // Exclude represents an exclusion list.
 type Exclude []string
 
-// GetFileList returns all the files in a path.
-// This is non-resursive and only returns files _in_ the base path provided.
-// This is a helper method and only exposed for convenience. You do not have to call this.
-func (x *Xtractr) GetFileList(path string) ([]string, error) {
-	fileList, err := os.ReadDir(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading path %s: %w", path, err)
+// Debugf calls the debug method on the logger if it's not nil.
+func (x *XFile) Debugf(format string, v ...any) {
+	if x.log != nil {
+		x.log.Debugf(format, v...)
 	}
+}
 
-	files := make([]string, len(fileList))
-	for idx, file := range fileList {
-		files[idx] = filepath.Join(path, file.Name())
+// GetFileList returns all the files in a path or paths.
+// This is non-recursive and only returns files _in_ the base paths provided.
+// This is a helper method and only exposed for convenience. You do not have to call this.
+func (x *Xtractr) GetFileList(paths ...string) ([]string, error) {
+	files := []string{}
+
+	for _, path := range paths {
+		stat, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("stat: %w", err)
+		}
+
+		if !stat.IsDir() {
+			files = append(files, path)
+			continue
+		}
+
+		fileList, err := os.ReadDir(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading path %s: %w", path, err)
+		}
+
+		for _, file := range fileList {
+			files = append(files, filepath.Join(path, file.Name()))
+		}
 	}
 
 	return files, nil
@@ -58,18 +187,14 @@ func (x *Xtractr) GetFileList(path string) ([]string, error) {
 // Difference returns all the strings that are in slice2 but not in slice1.
 // Used to find new files in a file list from a path. ie. those we extracted.
 // This is a helper method and only exposed for convenience. You do not have to call this.
-func Difference(slice1 []string, slice2 []string) []string {
+func Difference(slice1, slice2 []string) []string {
 	diff := []string{}
 
 	for _, s2p := range slice2 {
 		var found bool
 
-		for _, s1 := range slice1 {
-			if s1 == s2p {
-				found = true
-
-				break
-			}
+		if slices.Contains(slice1, s2p) {
+			found = true
 		}
 
 		if !found { // String not found, so it's a new string, add it to the diff.
@@ -91,72 +216,119 @@ func (e Exclude) Has(test string) bool {
 	return false
 }
 
-// FindCompressedFiles returns all the rar and zip files in a path. This attempts to grab
-// only the first file in a multi-part archive. Sometimes there are multiple archives, so
-// if the archive does not have "part" followed by a number in the name, then it will be
+// FindCompressedFiles returns all the compressed archive files in a path. This attempts to grab
+// only the first file in a multi-part rar or 7zip archive. Sometimes there are multiple archives,
+// so if the rar archive does not have "part" followed by a number in the name, then it will be
 // considered an independent archive. Some packagers seem to use different naming schemes,
-// so this will need to be updated as time progresses. So far it's working well.
-// This is a helper method and only exposed for convenience. You do not have to call this.
-func FindCompressedFiles(filter Filter) map[string][]string {
-	dir, err := os.Open(filter.Path)
+// so this may need to be updated as time progresses. Use the input to Filter to adjust the output.
+func FindCompressedFiles(filter Filter) ArchiveList {
+	return findCompressedFiles(filter.Path, &filter, 0)
+}
+
+func findCompressedFiles(path string, filter *Filter, depth int) ArchiveList {
+	if filter.MaxDepth > 0 && filter.MaxDepth < depth {
+		return nil
+	}
+
+	dir, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
 	defer dir.Close()
 
-	if info, err := dir.Stat(); err != nil {
+	info, err := dir.Stat()
+	if err != nil {
 		return nil // unreadable folder?
-	} else if l := strings.ToLower(filter.Path); !info.IsDir() &&
-		(strings.HasSuffix(l, ".zip") || strings.HasSuffix(l, ".rar") || strings.HasSuffix(l, ".r00")) {
-		return map[string][]string{filter.Path: {filter.Path}} // passed in an archive file; send it back out.
 	}
 
-	fileList, err := dir.Readdir(-1)
-	if err != nil {
+	if !info.IsDir() && IsArchiveFile(path) {
+		return ArchiveList{path: {path}} // passed in an archive file; send it back out.
+	}
+
+	fileList := getFilteredFileList(path, dir)
+	if len(fileList) == 0 {
 		return nil
 	}
 
-	// Check (save) if the current path has any rar files.
-	// So we can ignore r00 if it does.
-	r, _ := filepath.Glob(filepath.Join(filter.Path, "*.rar"))
+	return getCompressedFiles(path, filter, fileList, depth)
+}
 
-	return getCompressedFiles(len(r) > 0, filter, fileList)
+// getFilteredFileList reads the directory and returns a list of readable files that are not dot files.
+func getFilteredFileList(path string, dir *os.File) []os.FileInfo {
+	names, _ := dir.Readdirnames(-1)
+	fileList := make([]os.FileInfo, 0, len(names))
+
+	for _, name := range names {
+		if name == "" || name[0] == '.' {
+			continue // skip dot files (including AppleDouble ._* entries)
+		}
+
+		info, err := os.Lstat(filepath.Join(path, name))
+		if err != nil {
+			continue // skip entries we can't stat
+		}
+
+		fileList = append(fileList, info)
+	}
+
+	return fileList
+}
+
+// IsArchiveFile returns true if the provided path has an archive file extension.
+// This is not picky about extensions, and will match any that are known as an archive.
+// In the future, it may use file magic to figure out if the file is an archive without
+// relying on the extension.
+func IsArchiveFile(path string) bool {
+	path = strings.ToLower(path)
+
+	for _, ext := range extension2function {
+		if strings.HasSuffix(path, ext.Extension) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// CheckR00ForRarFile scans the file list to determine if a .rar file with the same name as .r00 exists.
+// Returns true if the r00 files has an accompanying rar file in the fileList.
+func CheckR00ForRarFile(fileList []os.FileInfo, r00file string) bool {
+	findFile := strings.TrimSuffix(strings.TrimSuffix(r00file, ".R00"), ".r00") + ".rar"
+
+	for _, file := range fileList {
+		if strings.EqualFold(file.Name(), findFile) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // getCompressedFiles checks file suffixes to find archives to decompress.
 // This pays special attention to the widely accepted variance of rar formats.
-func getCompressedFiles(hasrar bool, filter Filter, fileList []os.FileInfo) map[string][]string { //nolint:cyclop
-	files := map[string][]string{}
-	path := filter.Path
+func getCompressedFiles(path string, filter *Filter, fileList []os.FileInfo, depth int) ArchiveList { //nolint:cyclop
+	files := ArchiveList{}
 
 	for _, file := range fileList {
 		switch lowerName := strings.ToLower(file.Name()); {
-		case !file.IsDir() && filter.ExcludeSuffix.Has(lowerName):
-			continue // file suffix is excluded.
+		case !file.IsDir() &&
+			(filter.ExcludeSuffix.Has(lowerName) || depth < filter.MinDepth):
+			continue // file suffix is excluded or we are not deep enough.
 		case lowerName == "" || lowerName[0] == '.':
 			continue // ignore empty names and dot files/folders.
 		case file.IsDir(): // Recurse.
-			for k, v := range FindCompressedFiles(Filter{
-				Path:          filepath.Join(path, file.Name()),
-				ExcludeSuffix: filter.ExcludeSuffix,
-			}) {
-				files[k] = v
-			}
-		case strings.HasSuffix(lowerName, ".zip") || strings.HasSuffix(lowerName, ".tar") ||
-			strings.HasSuffix(lowerName, ".tgz") || strings.HasSuffix(lowerName, ".gz") ||
-			strings.HasSuffix(lowerName, ".bz2") || strings.HasSuffix(lowerName, ".7z") ||
-			strings.HasSuffix(lowerName, ".7z.001") || strings.HasSuffix(lowerName, ".iso"):
-			files[path] = append(files[path], filepath.Join(path, file.Name()))
+			maps.Copy(files, findCompressedFiles(filepath.Join(path, file.Name()), filter, depth+1))
 		case strings.HasSuffix(lowerName, ".rar"):
-			hasParts := regexp.MustCompile(`.*\.part[0-9]+\.rar$`)
+			hasParts := regexp.MustCompile(`.*\.part\d+\.rar$`)
 			partOne := regexp.MustCompile(`.*\.part0*1\.rar$`)
 			// Some archives are named poorly. Only return part01 or part001, not all.
-			if !hasParts.Match([]byte(lowerName)) || partOne.Match([]byte(lowerName)) {
+			if !hasParts.MatchString(lowerName) || partOne.MatchString(lowerName) {
 				files[path] = append(files[path], filepath.Join(path, file.Name()))
 			}
-
-		case !hasrar && strings.HasSuffix(lowerName, ".r00"):
+		case strings.HasSuffix(lowerName, ".r00") && !CheckR00ForRarFile(fileList, lowerName):
 			// Accept .r00 as the first archive file if no .rar files are present in the path.
+			files[path] = append(files[path], filepath.Join(path, file.Name()))
+		case !strings.HasSuffix(lowerName, ".r00") && IsArchiveFile(lowerName):
 			files[path] = append(files[path], filepath.Join(path, file.Name()))
 		}
 	}
@@ -166,62 +338,51 @@ func getCompressedFiles(hasrar bool, filter Filter, fileList []os.FileInfo) map[
 
 // Extract calls the correct procedure for the type of file being extracted.
 // Returns size of extracted data, list of extracted files, and/or error.
-func (x *XFile) Extract() (int64, []string, []string, error) {
+func (x *XFile) Extract() (size uint64, filesList, archiveList []string, err error) {
 	return ExtractFile(x)
 }
 
 // ExtractFile calls the correct procedure for the type of file being extracted.
 // Returns size of extracted data, list of extracted files, list of archives processed, and/or error.
-func ExtractFile(xFile *XFile) (int64, []string, []string, error) { //nolint:cyclop
-	var (
-		size  int64
-		files []string
-		err   error
-	)
+func ExtractFile(xFile *XFile) (size uint64, filesList, archiveList []string, err error) {
+	sName := strings.ToLower(xFile.FilePath)
+	// just borrowing this... Has to go into an interface to avoid a cycle.
+	xFile.moveFiles = parseConfig(&Config{Logger: xFile.log}).MoveFiles
 
-	switch sName := strings.ToLower(xFile.FilePath); {
-	case strings.HasSuffix(sName, ".rar"), strings.HasSuffix(sName, ".r00"):
-		return ExtractRAR(xFile)
-	case strings.HasSuffix(sName, ".7z"), strings.HasSuffix(sName, ".7z.001"):
-		return Extract7z(xFile)
-	case strings.HasSuffix(sName, ".zip"):
-		size, files, err = ExtractZIP(xFile)
-	case strings.HasSuffix(sName, ".tar.gz"), strings.HasSuffix(sName, ".tgz"):
-		size, files, err = ExtractTarGzip(xFile)
-	case strings.HasSuffix(sName, ".tar.bz2"), strings.HasSuffix(sName, ".tbz2"),
-		strings.HasSuffix(sName, ".tbz"), strings.HasSuffix(sName, ".tar.bz"):
-		size, files, err = ExtractTarBzip(xFile)
-	case strings.HasSuffix(sName, ".bz"), strings.HasSuffix(sName, ".bz2"):
-		size, files, err = ExtractBzip(xFile)
-	case strings.HasSuffix(sName, ".gz"):
-		size, files, err = ExtractGzip(xFile)
-	case strings.HasSuffix(sName, ".iso"):
-		size, files, err = ExtractISO(xFile)
-	case strings.HasSuffix(sName, ".tar"):
-		size, files, err = ExtractTar(xFile)
-	default:
-		return 0, nil, nil, fmt.Errorf("%w: %s", ErrUnknownArchiveType, xFile.FilePath)
+	for _, ext := range extension2function {
+		if strings.HasSuffix(sName, ext.Extension) {
+			return ext.Extract(xFile)
+		}
 	}
 
-	return size, files, []string{xFile.FilePath}, err
+	return 0, nil, nil, fmt.Errorf("%w: %s", ErrUnknownArchiveType, xFile.FilePath)
 }
 
 // MoveFiles relocates files then removes the folder they were in.
 // Returns the new file paths.
 // This is a helper method and only exposed for convenience. You do not have to call this.
-func (x *Xtractr) MoveFiles(fromPath string, toPath string, overwrite bool) ([]string, error) {
+func (x *Xtractr) MoveFiles(fromPath, toPath string, overwrite bool) ([]string, error) { //nolint:cyclop
 	var (
-		files, err = x.GetFileList(fromPath)
-		newFiles   = []string{}
-		keepErr    error
+		newFiles = []string{}
+		keepErr  error
 	)
 
+	files, err := x.GetFileList(fromPath)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := os.MkdirAll(toPath, x.config.DirMode); err != nil {
-		return nil, fmt.Errorf("os.MkDirAll: %w", err)
+	// If the "to path" is an existing archive file, remove the suffix to make a directory.
+	_, err = os.Stat(toPath)
+	if err == nil && IsArchiveFile(toPath) {
+		toPath = strings.TrimSuffix(toPath, filepath.Ext(toPath))
+	}
+
+	x.config.Debugf("Moving files: %v (%d files) -> %v", fromPath, len(files), toPath)
+
+	err = os.MkdirAll(toPath, x.config.DirMode)
+	if err != nil {
+		return nil, fmt.Errorf("making final dir: %w", err)
 	}
 
 	for _, file := range files {
@@ -260,7 +421,8 @@ func (x *Xtractr) MoveFiles(fromPath string, toPath string, overwrite bool) ([]s
 // DeleteFiles obliterates things and logs. Use with caution.
 func (x *Xtractr) DeleteFiles(files ...string) {
 	for _, file := range files {
-		if err := os.RemoveAll(file); err != nil {
+		err := os.RemoveAll(file)
+		if err != nil {
 			x.config.Printf("Error: Deleting %v: %v", file, err)
 
 			continue
@@ -270,29 +432,19 @@ func (x *Xtractr) DeleteFiles(files ...string) {
 	}
 }
 
-// writeFile writes a file from an io reader, making sure all parent directories exist.
-func writeFile(fpath string, fdata io.Reader, fMode, dMode os.FileMode) (int64, error) {
-	if err := os.MkdirAll(filepath.Dir(fpath), dMode); err != nil {
-		return 0, fmt.Errorf("os.MkdirAll: %w", err)
-	}
-
-	fout, err := os.OpenFile(fpath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, fMode)
-	if err != nil {
-		return 0, fmt.Errorf("os.OpenFile: %w", err)
-	}
-	defer fout.Close()
-
-	s, err := io.Copy(fout, fdata)
-	if err != nil {
-		return s, fmt.Errorf("copying io: %w", err)
-	}
-
-	return s, nil
+type file struct {
+	Path     string
+	Data     io.Reader
+	FileMode os.FileMode
+	DirMode  os.FileMode
+	Mtime    time.Time
+	Atime    time.Time
 }
 
 // Rename is an attempt to deal with "invalid cross link device" on weird file systems.
 func (x *Xtractr) Rename(oldpath, newpath string) error {
-	if err := os.Rename(oldpath, newpath); err == nil {
+	err := os.Rename(oldpath, newpath)
+	if err == nil {
 		return nil
 	}
 
@@ -302,25 +454,187 @@ func (x *Xtractr) Rename(oldpath, newpath string) error {
 	if err != nil {
 		return fmt.Errorf("os.Open(): %w", err)
 	}
+	defer oldFile.Close()
 
 	newFile, err := os.OpenFile(newpath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, x.config.FileMode)
 	if err != nil {
-		oldFile.Close()
 		return fmt.Errorf("os.OpenFile(): %w", err)
 	}
 	defer newFile.Close()
 
 	_, err = io.Copy(newFile, oldFile)
-	oldFile.Close()
-
 	if err != nil {
 		return fmt.Errorf("io.Copy(): %w", err)
 	}
 
 	// The copy was successful, so now delete the original file
+	_ = oldFile.Close() // Needs to be closed before delete.
 	_ = os.Remove(oldpath)
 
 	return nil
+}
+
+// AllExcept can be used as an input to ExcludeSuffix in a Filter.
+// Returns a list of supported extensions minus the ones provided.
+// Extensions for like-types such as .rar and .r00 need to both be provided.
+// Same for .tar.gz and .tgz variants.
+func AllExcept(onlyThese ...string) Exclude {
+	// Start by excluding everything.
+	output := SupportedExtensions()
+
+	// Loop through the extensions we want to keep.
+	for _, str := range onlyThese {
+		idx := 0
+		// Remove each one from the output list.
+		for _, ext := range output {
+			if !strings.EqualFold(ext, str) {
+				output[idx] = ext
+				idx++
+			}
+		}
+		// Truncate the output to the size of items kept.
+		output = output[:idx]
+	}
+
+	return output
+}
+
+// Count returns the number of unique archives in the archive list.
+func (a ArchiveList) Count() int {
+	var count int
+
+	for _, files := range a {
+		count += len(files)
+	}
+
+	return count
+}
+
+// Random returns a random file listing from the archive list.
+// If the list only contains one directory, then that is the one returned.
+// If the archive list is empty or nil, returns nil.
+func (a ArchiveList) Random() []string {
+	for _, files := range a {
+		return files
+	}
+
+	return nil
+}
+
+// List returns all of the archives as a string slice.
+func (a ArchiveList) List() []string {
+	list := make([]string, 0, len(a))
+
+	for _, files := range a {
+		list = append(list, files...)
+	}
+
+	return list
+}
+
+// SetLogger sets the logger interface on an XFile. Useful when you need to debug what it's doing.
+func (x *XFile) SetLogger(logger Logger) {
+	x.log = logger
+}
+
+// cleanup runs after a successful extract.
+// The intent it to move files into their final location.
+func (x *XFile) cleanup(files []string) ([]string, error) {
+	files, err := x.squashRoot(files)
+	if err != nil {
+		return files, err
+	}
+
+	return files, nil
+}
+
+func (x *XFile) squashRoot(files []string) ([]string, error) {
+	if !x.SquashRoot {
+		return files, nil
+	}
+
+	roots := map[string]struct{}{}
+
+	for _, path := range files {
+		// Remove the output dir suffix, then split on `/` (or `\`) and get the first item.
+		newRoot := strings.TrimLeft(strings.TrimPrefix(path, x.OutputDir), string(filepath.Separator))
+		roots[strings.SplitN(newRoot, string(filepath.Separator), 2)[0]] = struct{}{} //nolint:mnd
+	}
+
+	if len(roots) == 1 { // only 1 root folder...
+		for root := range roots { // ...move it's content up a level.
+			return x.moveFiles(filepath.Join(x.OutputDir, root), x.OutputDir, false)
+		}
+	}
+
+	return files, nil
+}
+
+func (x *XFile) safeDirMode(current os.FileMode) os.FileMode {
+	if current.Perm() == 0 {
+		return x.DirMode
+	}
+
+	const minimum = 0o700 // ensure owner has read/write/exec on folders.
+
+	return current | minimum
+}
+
+func (x *XFile) safeFileMode(current os.FileMode) os.FileMode {
+	if current.Perm() == 0 {
+		return x.FileMode
+	}
+
+	const minimum = 0o400 // ensure owner has read access to the file.
+
+	return current | minimum
+}
+
+func openStatFile(path string) (*os.File, os.FileInfo, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("os.Open: %w", err)
+	}
+
+	stat, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, nil, fmt.Errorf("file.Stat: %w", err)
+	}
+
+	return file, stat, nil
+}
+
+func (x *XFile) mkDir(path string, mode os.FileMode, mtime time.Time) error {
+	defer os.Chtimes(path, time.Time{}, mtime)
+	return os.MkdirAll(path, x.safeDirMode(mode)) //nolint:wrapcheck
+}
+
+// write a file from an io reader, making sure all parent directories exist.
+func (x *XFile) write(file *file) (uint64, error) {
+	err := x.mkDir(filepath.Dir(file.Path), file.DirMode, file.Mtime)
+	if err != nil {
+		return 0, fmt.Errorf("writing archived file '%s' parent folder: %w", filepath.Base(file.Path), err)
+	}
+
+	fout, err := os.OpenFile(file.Path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, x.safeFileMode(file.FileMode))
+	if err != nil {
+		return 0, fmt.Errorf("opening archived file for writing: %w", err)
+	}
+	defer fout.Close()
+
+	size, err := io.Copy(x.prog.writer(fout), file.Data)
+	if err != nil {
+		return uint64(size), fmt.Errorf("copying archived file '%s' io: %w", file.Path, err)
+	}
+
+	// If this sucks, make it a defer and ignore the error, like xFile.mkDir().
+	err = os.Chtimes(file.Path, file.Atime, file.Mtime)
+	if err != nil {
+		return uint64(size), fmt.Errorf("changing archived file times: %w", err)
+	}
+
+	return uint64(size), nil
 }
 
 // clean returns an absolute path for a file inside the OutputDir.

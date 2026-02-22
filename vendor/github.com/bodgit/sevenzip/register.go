@@ -24,12 +24,16 @@ import (
 // one io.ReadCloser's providing the stream(s) of bytes.
 type Decompressor func([]byte, uint64, []io.ReadCloser) (io.ReadCloser, error)
 
-//nolint:gochecknoglobals
-var decompressors sync.Map
+var (
+	//nolint:gochecknoglobals
+	decompressors sync.Map
+
+	errNeedOneReader = errors.New("copy: need exactly one reader")
+)
 
 func newCopyReader(_ []byte, _ uint64, readers []io.ReadCloser) (io.ReadCloser, error) {
 	if len(readers) != 1 {
-		return nil, errors.New("sevenzip: need exactly one reader")
+		return nil, errNeedOneReader
 	}
 	// just return the passed io.ReadCloser)
 	return readers[0], nil
@@ -71,9 +75,7 @@ func init() {
 
 // RegisterDecompressor allows custom decompressors for a specified method ID.
 func RegisterDecompressor(method []byte, dcomp Decompressor) {
-	if _, dup := decompressors.LoadOrStore(string(method), dcomp); dup {
-		panic("decompressor already registered")
-	}
+	decompressors.Store(string(method), dcomp)
 }
 
 func decompressor(method []byte) Decompressor {

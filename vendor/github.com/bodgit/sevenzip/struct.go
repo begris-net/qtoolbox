@@ -3,10 +3,11 @@ package sevenzip
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
-	"io/fs"
+	iofs "io/fs"
 	"path"
 	"time"
 
@@ -14,11 +15,20 @@ import (
 	"github.com/bodgit/sevenzip/internal/util"
 )
 
-var errAlgorithm = errors.New("sevenzip: unsupported compression algorithm")
+var (
+	errAlgorithm             = errors.New("sevenzip: unsupported compression algorithm")
+	errInvalidWhence         = errors.New("invalid whence")
+	errNegativeSeek          = errors.New("negative seek")
+	errSeekBackwards         = errors.New("cannot seek backwards")
+	errSeekEOF               = errors.New("cannot seek beyond EOF")
+	errMultipleOutputStreams = errors.New("more than one output stream")
+	errNoBoundStream         = errors.New("cannot find bound stream")
+	errNoUnboundStream       = errors.New("expecting one unbound output stream")
+)
 
 // CryptoReadCloser adds a Password method to decompressors.
 type CryptoReadCloser interface {
-	Password(string) error
+	Password(password string) error
 }
 
 type signatureHeader struct {
@@ -80,31 +90,33 @@ func (f *folder) findOutBindPair(i uint64) *bindPair {
 	return nil
 }
 
-func (f *folder) coderReader(readers []io.ReadCloser, coder uint64, password string) (io.ReadCloser, error) {
+func (f *folder) coderReader(readers []io.ReadCloser, coder uint64, password string) (io.ReadCloser, bool, error) {
 	dcomp := decompressor(f.coder[coder].id)
 	if dcomp == nil {
-		return nil, errAlgorithm
+		return nil, false, errAlgorithm
 	}
 
 	cr, err := dcomp(f.coder[coder].properties, f.size[coder], readers)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	if crc, ok := cr.(CryptoReadCloser); ok {
+	crc, ok := cr.(CryptoReadCloser)
+	if ok {
 		if err = crc.Password(password); err != nil {
-			return nil, err
+			return nil, true, fmt.Errorf("sevenzip: error setting password: %w", err)
 		}
 	}
 
-	return plumbing.LimitReadCloser(cr, int64(f.size[coder])), nil
+	return plumbing.LimitReadCloser(cr, int64(f.size[coder])), ok, nil //nolint:gosec
 }
 
 type folderReadCloser struct {
 	io.ReadCloser
-	h    hash.Hash
-	wc   *plumbing.WriteCounter
-	size int64
+	h             hash.Hash
+	wc            *plumbing.WriteCounter
+	size          int64
+	hasEncryption bool
 }
 
 func (rc *folderReadCloser) Checksum() []byte {
@@ -118,27 +130,27 @@ func (rc *folderReadCloser) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekStart:
 		newo = offset
 	case io.SeekCurrent:
-		newo = int64(rc.wc.Count()) + offset
+		newo = int64(rc.wc.Count()) + offset //nolint:gosec
 	case io.SeekEnd:
 		newo = rc.Size() + offset
 	default:
-		return 0, errors.New("invalid whence")
+		return 0, errInvalidWhence
 	}
 
 	if newo < 0 {
-		return 0, errors.New("negative seek")
+		return 0, errNegativeSeek
 	}
 
-	if newo < int64(rc.wc.Count()) {
-		return 0, errors.New("cannot seek backwards")
+	if uint64(newo) < rc.wc.Count() {
+		return 0, errSeekBackwards
 	}
 
 	if newo > rc.Size() {
-		return 0, errors.New("cannot seek beyond EOF")
+		return 0, errSeekEOF
 	}
 
-	if _, err := io.CopyN(io.Discard, rc, newo-int64(rc.wc.Count())); err != nil {
-		return 0, err
+	if _, err := io.CopyN(io.Discard, rc, newo-int64(rc.wc.Count())); err != nil { //nolint:gosec
+		return 0, fmt.Errorf("sevenzip: error seeking: %w", err)
 	}
 
 	return newo, nil
@@ -148,12 +160,13 @@ func (rc *folderReadCloser) Size() int64 {
 	return rc.size
 }
 
-func newFolderReadCloser(rc io.ReadCloser, size int64) *folderReadCloser {
+func newFolderReadCloser(rc io.ReadCloser, size int64, hasEncryption bool) *folderReadCloser {
 	nrc := new(folderReadCloser)
 	nrc.h = crc32.NewIEEE()
 	nrc.wc = new(plumbing.WriteCounter)
 	nrc.ReadCloser = plumbing.TeeReadCloser(rc, io.MultiWriter(nrc.h, nrc.wc))
 	nrc.size = size
+	nrc.hasEncryption = hasEncryption
 
 	return nrc
 }
@@ -197,28 +210,37 @@ func (si *streamsInfo) Folders() int {
 	return 0
 }
 
-func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64) {
-	total := uint64(0)
-
+func (si *streamsInfo) FileFolderAndSize(file int) (int, uint64, uint32) {
 	var (
 		folder  int
 		streams uint64 = 1
+		crc     uint32
 	)
 
 	if si.subStreamsInfo != nil {
+		total := uint64(0)
+
 		for folder, streams = range si.subStreamsInfo.streams {
 			total += streams
-			if uint64(file) < total {
+			if uint64(file) < total { //nolint:gosec
 				break
 			}
+		}
+
+		if len(si.subStreamsInfo.digest) > 0 {
+			crc = si.subStreamsInfo.digest[file]
 		}
 	}
 
 	if streams == 1 {
-		return folder, si.unpackInfo.folder[folder].size[len(si.unpackInfo.folder[folder].coder)-1]
+		if len(si.unpackInfo.digest) > 0 {
+			crc = si.unpackInfo.digest[folder]
+		}
+
+		return folder, si.unpackInfo.folder[folder].size[len(si.unpackInfo.folder[folder].coder)-1], crc
 	}
 
-	return folder, si.subStreamsInfo.size[file]
+	return folder, si.subStreamsInfo.size[file], crc
 }
 
 func (si *streamsInfo) folderOffset(folder int) int64 {
@@ -232,11 +254,11 @@ func (si *streamsInfo) folderOffset(folder int) int64 {
 		k += si.unpackInfo.folder[i].packedStreams
 	}
 
-	return int64(si.packInfo.position + offset)
+	return int64(si.packInfo.position + offset) //nolint:gosec
 }
 
-//nolint:cyclop,funlen
-func (si *streamsInfo) FolderReader(r io.ReaderAt, folder int, password string) (*folderReadCloser, uint32, error) {
+//nolint:cyclop,funlen,lll
+func (si *streamsInfo) FolderReader(r io.ReaderAt, folder int, password string) (*folderReadCloser, uint32, bool, error) {
 	f := si.unpackInfo.folder[folder]
 	in := make([]io.ReadCloser, f.in)
 	out := make([]io.ReadCloser, f.out)
@@ -249,16 +271,19 @@ func (si *streamsInfo) FolderReader(r io.ReaderAt, folder int, password string) 
 	offset := int64(0)
 
 	for i, input := range f.packed {
-		size := int64(si.packInfo.size[packedOffset+i])
+		size := int64(si.packInfo.size[packedOffset+i]) //nolint:gosec
 		in[input] = util.NopCloser(bufio.NewReader(io.NewSectionReader(r, si.folderOffset(folder)+offset, size)))
 		offset += size
 	}
 
-	input, output := uint64(0), uint64(0)
+	var (
+		hasEncryption bool
+		input, output uint64
+	)
 
 	for i, c := range f.coder {
 		if c.out != 1 {
-			return nil, 0, errors.New("more than one output stream")
+			return nil, 0, hasEncryption, errMultipleOutputStreams
 		}
 
 		for j := input; j < input+c.in; j++ {
@@ -268,17 +293,24 @@ func (si *streamsInfo) FolderReader(r io.ReaderAt, folder int, password string) 
 
 			bp := f.findInBindPair(j)
 			if bp == nil || out[bp.out] == nil {
-				return nil, 0, errors.New("cannot find bound stream")
+				return nil, 0, hasEncryption, errNoBoundStream
 			}
 
 			in[j] = out[bp.out]
 		}
 
-		var err error
+		var (
+			isEncrypted bool
+			err         error
+		)
 
-		out[output], err = f.coderReader(in[input:input+c.in], uint64(i), password)
+		out[output], isEncrypted, err = f.coderReader(in[input:input+c.in], uint64(i), password) //nolint:gosec
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, hasEncryption, err
+		}
+
+		if isEncrypted {
+			hasEncryption = true
 		}
 
 		input += c.in
@@ -294,16 +326,16 @@ func (si *streamsInfo) FolderReader(r io.ReaderAt, folder int, password string) 
 	}
 
 	if len(unbound) != 1 || out[unbound[0]] == nil {
-		return nil, 0, errors.New("expecting one unbound output stream")
+		return nil, 0, hasEncryption, errNoUnboundStream
 	}
 
-	fr := newFolderReadCloser(out[unbound[0]], int64(f.unpackSize()))
+	fr := newFolderReadCloser(out[unbound[0]], int64(f.unpackSize()), hasEncryption) //nolint:gosec
 
 	if si.unpackInfo.digest != nil {
-		return fr, si.unpackInfo.digest[folder], nil
+		return fr, si.unpackInfo.digest[folder], hasEncryption, nil
 	}
 
-	return fr, 0, nil
+	return fr, 0, hasEncryption, nil
 }
 
 type filesInfo struct {
@@ -334,8 +366,8 @@ type FileHeader struct {
 	isEmptyFile   bool
 }
 
-// FileInfo returns an fs.FileInfo for the FileHeader.
-func (h *FileHeader) FileInfo() fs.FileInfo {
+// FileInfo returns an [fs.FileInfo] for the FileHeader.
+func (h *FileHeader) FileInfo() iofs.FileInfo {
 	return headerFileInfo{h}
 }
 
@@ -343,15 +375,15 @@ type headerFileInfo struct {
 	fh *FileHeader
 }
 
-func (fi headerFileInfo) Name() string       { return path.Base(fi.fh.Name) }
-func (fi headerFileInfo) Size() int64        { return int64(fi.fh.UncompressedSize) }
-func (fi headerFileInfo) IsDir() bool        { return fi.Mode().IsDir() }
-func (fi headerFileInfo) ModTime() time.Time { return fi.fh.Modified.UTC() }
-func (fi headerFileInfo) Mode() fs.FileMode  { return fi.fh.Mode() }
-func (fi headerFileInfo) Type() fs.FileMode  { return fi.fh.Mode().Type() }
-func (fi headerFileInfo) Sys() interface{}   { return fi.fh }
+func (fi headerFileInfo) Name() string        { return path.Base(fi.fh.Name) }
+func (fi headerFileInfo) Size() int64         { return int64(fi.fh.UncompressedSize) } //nolint:gosec
+func (fi headerFileInfo) IsDir() bool         { return fi.Mode().IsDir() }
+func (fi headerFileInfo) ModTime() time.Time  { return fi.fh.Modified.UTC() }
+func (fi headerFileInfo) Mode() iofs.FileMode { return fi.fh.Mode() }
+func (fi headerFileInfo) Type() iofs.FileMode { return fi.fh.Mode().Type() }
+func (fi headerFileInfo) Sys() interface{}    { return fi.fh }
 
-func (fi headerFileInfo) Info() (fs.FileInfo, error) { return fi, nil }
+func (fi headerFileInfo) Info() (iofs.FileInfo, error) { return fi, nil }
 
 const (
 	// Unix constants. The specification doesn't mention them,
@@ -373,7 +405,7 @@ const (
 )
 
 // Mode returns the permission and mode bits for the FileHeader.
-func (h *FileHeader) Mode() (mode fs.FileMode) {
+func (h *FileHeader) Mode() (mode iofs.FileMode) {
 	// Prefer the POSIX attributes if they're present
 	if h.Attributes&0xf0000000 != 0 {
 		mode = unixModeToFileMode(h.Attributes >> 16)
@@ -384,9 +416,9 @@ func (h *FileHeader) Mode() (mode fs.FileMode) {
 	return
 }
 
-func msdosModeToFileMode(m uint32) (mode fs.FileMode) {
+func msdosModeToFileMode(m uint32) (mode iofs.FileMode) {
 	if m&msdosDir != 0 {
-		mode = fs.ModeDir | 0o777
+		mode = iofs.ModeDir | 0o777
 	} else {
 		mode = 0o666
 	}
@@ -399,36 +431,36 @@ func msdosModeToFileMode(m uint32) (mode fs.FileMode) {
 }
 
 //nolint:cyclop
-func unixModeToFileMode(m uint32) fs.FileMode {
-	mode := fs.FileMode(m & 0o777)
+func unixModeToFileMode(m uint32) iofs.FileMode {
+	mode := iofs.FileMode(m & 0o777)
 
 	switch m & sIFMT {
 	case sIFBLK:
-		mode |= fs.ModeDevice
+		mode |= iofs.ModeDevice
 	case sIFCHR:
-		mode |= fs.ModeDevice | fs.ModeCharDevice
+		mode |= iofs.ModeDevice | iofs.ModeCharDevice
 	case sIFDIR:
-		mode |= fs.ModeDir
+		mode |= iofs.ModeDir
 	case sIFIFO:
-		mode |= fs.ModeNamedPipe
+		mode |= iofs.ModeNamedPipe
 	case sIFLNK:
-		mode |= fs.ModeSymlink
+		mode |= iofs.ModeSymlink
 	case sIFREG:
 		// nothing to do
 	case sIFSOCK:
-		mode |= fs.ModeSocket
+		mode |= iofs.ModeSocket
 	}
 
 	if m&sISGID != 0 {
-		mode |= fs.ModeSetgid
+		mode |= iofs.ModeSetgid
 	}
 
 	if m&sISUID != 0 {
-		mode |= fs.ModeSetuid
+		mode |= iofs.ModeSetuid
 	}
 
 	if m&sISVTX != 0 {
-		mode |= fs.ModeSticky
+		mode |= iofs.ModeSticky
 	}
 
 	return mode

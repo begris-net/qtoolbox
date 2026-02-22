@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
+	"sync"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	"go4.org/syncutil"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 )
@@ -21,18 +22,14 @@ type cacheKey struct {
 const cacheSize = 10
 
 //nolint:gochecknoglobals
-var (
-	once  syncutil.Once
-	cache *lru.Cache[cacheKey, []byte]
-)
+var once = sync.OnceValues(func() (*lru.Cache[cacheKey, []byte], error) {
+	return lru.New[cacheKey, []byte](cacheSize)
+})
 
 func calculateKey(password string, cycles int, salt []byte) ([]byte, error) {
-	if err := once.Do(func() (err error) {
-		cache, err = lru.New[cacheKey, []byte](cacheSize)
-
-		return
-	}); err != nil {
-		return nil, err
+	cache, err := once()
+	if err != nil {
+		return nil, fmt.Errorf("aes7z: error creating cache: %w", err)
 	}
 
 	ck := cacheKey{
@@ -62,6 +59,7 @@ func calculateKey(password string, cycles int, salt []byte) ([]byte, error) {
 			_, _ = h.Write(b.Bytes())
 			_ = binary.Write(h, binary.LittleEndian, i)
 		}
+
 		copy(key, h.Sum(nil))
 	}
 

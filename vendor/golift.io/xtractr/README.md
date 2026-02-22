@@ -1,12 +1,32 @@
 # `xtractr`
 
-Go Library for Queuing and Extracting ZIP, RAR, GZ, BZ2, TAR, TGZ, TBZ2, 7Z files.
+Go Library for Queuing and Extracting ZIP, RAR, GZ, BZ2, TAR, 
+TGZ, TBZ2, 7Z, ISO ([and other](https://github.com/golift/xtractr/issues/44)) compressed archive files.
 Can also be used ad-hoc for direct decompression and extraction. See docs.
 
 -   [GoDoc](https://pkg.go.dev/golift.io/xtractr)
 -   Works on Linux, Windows, FreeBSD and macOS **without Cgo**.
 -   Supports 32 and 64 bit architectures.
 -   Decrypts RAR and 7-Zip archives with passwords.
+
+# Interface
+
+This library provides a queue, and a common interface to extract files.
+It does not do the heavy lifting, and relies on these libraries to extract files:
+
+- [**RAR**: nwaples/rardecode](https://github.com/nwaples/rardecode)
+- [**7-Zip**: bodgit/sevenzip](https://github.com/bodgit/sevenzip)
+- [**ISO**: kdomanski/iso9660](https://github.com/kdomanski/iso9660)
+- [**Brotli**: andybalholm/brotli](https://github.com/andybalholm/brotli)
+- [**LZ4**: pierrec/lz4](https://github.com/pierrec/lz4)
+- [**XZ**: github.com/therootcompany/xz](https://github.com/github.com/therootcompany/xz)
+- [**Zstandard**: klauspost/compress](https://github.com/klauspost/compress)
+- [**S2**: klauspost/compress](https://github.com/klauspost/compress)
+- [**Snappy**: klauspost/compress](https://github.com/klauspost/compress)
+- [**Zlib**: klauspost/compress](https://github.com/klauspost/compress)
+- [**LZW**: sshaman1101/dcompress](https://github.com/sshaman1101/dcompress)
+
+`Zip`, `Gzip`, `Tar` and `Bzip` are all handled by the standard Go library.
 
 # Examples
 
