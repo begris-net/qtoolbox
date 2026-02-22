@@ -1,7 +1,7 @@
 package xtractr
 
 import (
-	"fmt"
+	"errors"
 	"os"
 )
 
@@ -18,6 +18,9 @@ const (
 // Config is the input data to configure the Xtract queue. Fill this out and
 // pass it into NewQueue() to create a queue for archive extractions.
 type Config struct {
+	// Logs are sent to this Logger.
+	Logger
+
 	// Size of the extraction channel buffer. Default=1000.
 	// Use -1 for unbuffered channel. Not recommend.
 	BuffSize int
@@ -27,17 +30,19 @@ type Config struct {
 	FileMode os.FileMode
 	// Filemode used when writing folders, tar ignores this.
 	DirMode os.FileMode
+	// When true, if extractions would overwrite the final folder,
+	// a suffix is added instead. ie. .1, .2, .3, etc.
+	// Default is false because a misconfiguration may fill your disk.
+	TryNames bool
 	// The suffix used for temporary folders.
 	Suffix string
-	// Logs are sent to this Logger.
-	Logger
 }
 
 // Logger allows this library to write logs.
 // Use this to capture them in your own flow.
 type Logger interface {
-	Printf(string, ...interface{})
-	Debugf(string, ...interface{})
+	Printf(format string, v ...any)
+	Debugf(format string, v ...any)
 }
 
 // Xtractr is what you get from NewQueue(). This is the main app struct.
@@ -50,26 +55,28 @@ type Xtractr struct {
 
 // Custom errors returned by this module.
 var (
-	ErrQueueStopped       = fmt.Errorf("extractor queue stopped, cannot extract")
-	ErrNoCompressedFiles  = fmt.Errorf("no compressed files found")
-	ErrUnknownArchiveType = fmt.Errorf("unknown archive file type")
-	ErrInvalidPath        = fmt.Errorf("archived file contains invalid path")
-	ErrInvalidHead        = fmt.Errorf("archived file contains invalid header file")
-	ErrQueueRunning       = fmt.Errorf("extractor queue running, cannot start")
-	ErrNoConfig           = fmt.Errorf("call NewQueue() to initialize a queue")
-	ErrNoLogger           = fmt.Errorf("xtractr.Config.Logger must be non-nil")
+	ErrQueueStopped       = errors.New("extractor queue stopped, cannot extract")
+	ErrNoCompressedFiles  = errors.New("no compressed files found")
+	ErrUnknownArchiveType = errors.New("unknown archive file type")
+	ErrInvalidPath        = errors.New("archived file contains invalid path")
+	ErrInvalidHead        = errors.New("archived file contains invalid header file")
+	ErrQueueRunning       = errors.New("extractor queue running, cannot start")
+	ErrNoConfig           = errors.New("call NewQueue() to initialize a queue")
+	ErrNoLogger           = errors.New("xtractr.Config.Logger must be non-nil")
 )
 
 // NewQueue returns a new Xtractr Queue you can send Xtract jobs into.
 // This is where to start if you're creating an extractor queue.
 // You must provide a Logger in the config, everything else is optional.
 func NewQueue(config *Config) *Xtractr {
-	x := parseConfig(config)
-	if err := x.Start(); err != nil {
+	app := parseConfig(config)
+
+	err := app.Start()
+	if err != nil {
 		panic(err)
 	}
 
-	return x
+	return app
 }
 
 // Start restarts the queue. This can be called only after you call Stop().
@@ -91,7 +98,7 @@ func (x *Xtractr) Start() error {
 
 	x.queue = make(chan *Xtract, x.config.BuffSize)
 
-	for i := 0; i < x.config.Parallel; i++ {
+	for range x.config.Parallel {
 		go x.processQueue()
 	}
 
@@ -122,6 +129,10 @@ func parseConfig(config *Config) *Xtractr {
 		config.Suffix = DefaultSuffix
 	}
 
+	if config.Logger == nil {
+		config.Logger = NoLogger()
+	}
+
 	return &Xtractr{
 		config: config,
 		done:   make(chan struct{}),
@@ -137,7 +148,7 @@ func (x *Xtractr) Stop() {
 	close(x.queue)
 
 	// Wait until all running extractions are done.
-	for i := 0; i < x.config.Parallel; i++ {
+	for range x.config.Parallel {
 		<-x.done
 	}
 

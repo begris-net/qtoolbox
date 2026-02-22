@@ -3,62 +3,92 @@ package xtractr
 import (
 	"archive/zip"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 /* How to extract a ZIP file. */
 
 // ExtractZIP extracts a zip file.. to a destination. Simple enough.
-func ExtractZIP(xFile *XFile) (int64, []string, error) {
+func ExtractZIP(xFile *XFile) (size uint64, filesList []string, err error) {
 	zipReader, err := zip.OpenReader(xFile.FilePath)
 	if err != nil {
 		return 0, nil, fmt.Errorf("zip.OpenReader: %w", err)
 	}
 	defer zipReader.Close()
 
-	files := []string{}
-	size := int64(0)
+	defer xFile.newProgress(getUncompressedZipSize(zipReader)).done()
 
-	for _, zipFile := range zipReader.Reader.File {
-		fSize, err := xFile.unzip(zipFile)
+	files := []string{}
+
+	for _, zipFile := range zipReader.File {
+		fSize, wfile, err := xFile.unzip(zipFile)
 		if err != nil {
-			return size, files, fmt.Errorf("%s: %w", xFile.FilePath, err)
+			return xFile.prog.Wrote, files, fmt.Errorf("%s: %w", xFile.FilePath, err)
 		}
 
-		files = append(files, filepath.Join(xFile.OutputDir, zipFile.Name)) //nolint: gosec
-		size += fSize
+		//nolint:gosec // this is safe because we clean the paths.
+		files = append(files, filepath.Join(xFile.OutputDir, zipFile.Name))
+		xFile.Debugf("Wrote archived file: %s (%d bytes), total: %d files and %d bytes",
+			wfile, fSize, xFile.prog.Files, xFile.prog.Wrote)
 	}
 
-	return size, files, nil
+	files, err = xFile.cleanup(files)
+
+	return xFile.prog.Wrote, files, err
 }
 
-func (x *XFile) unzip(zipFile *zip.File) (int64, error) { //nolint:dupl
-	wfile := x.clean(zipFile.Name)
-	if !strings.HasPrefix(wfile, x.OutputDir) {
-		// The file being written is trying to write outside of our base path. Malicious archive?
-		return 0, fmt.Errorf("%s: %w: %s (from: %s)", zipFile.FileInfo().Name(), ErrInvalidPath, wfile, zipFile.Name)
+func getUncompressedZipSize(zipReader *zip.ReadCloser) (total, compressed uint64, count int) {
+	for _, zipFile := range zipReader.File {
+		total += zipFile.UncompressedSize64
+		// compressed += zipFile.CompressedSize64
+		count++
 	}
 
-	if strings.HasSuffix(wfile, "/") || zipFile.FileInfo().IsDir() {
-		if err := os.MkdirAll(wfile, x.DirMode); err != nil {
-			return 0, fmt.Errorf("making zipFile dir: %w", err)
-		}
+	return total, 0, count
+}
 
-		return 0, nil
-	}
-
+func (x *XFile) unzip(zipFile *zip.File) (uint64, string, error) {
 	zFile, err := zipFile.Open()
 	if err != nil {
-		return 0, fmt.Errorf("zipFile.Open: %w", err)
+		return 0, zipFile.Name, fmt.Errorf("zipFile.Open: %w", err)
 	}
 	defer zFile.Close()
 
-	s, err := writeFile(wfile, zFile, x.FileMode, x.DirMode)
-	if err != nil {
-		return s, fmt.Errorf("%s: %w: %s (from: %s)", zipFile.FileInfo().Name(), err, wfile, zipFile.Name)
+	file := &file{
+		Path:     x.clean(zipFile.Name),
+		Data:     zFile,
+		FileMode: zipFile.Mode(),
+		DirMode:  x.DirMode,
+		Mtime:    zipFile.Modified,
+		Atime:    time.Now(),
 	}
 
-	return s, nil
+	if !strings.HasPrefix(file.Path, x.OutputDir) {
+		// The file being written is trying to write outside of our base path. Malicious archive?
+		err := fmt.Errorf("%s: %w: %s (from: %s)", zipFile.FileInfo().Name(), ErrInvalidPath, file.Path, zipFile.Name)
+		return 0, file.Path, err
+	}
+
+	if zipFile.FileInfo().IsDir() {
+		x.Debugf("Writing archived directory: %s", file.Path)
+
+		err := x.mkDir(file.Path, zipFile.Mode(), zipFile.Modified)
+		if err != nil {
+			return 0, file.Path, fmt.Errorf("making zipFile dir: %w", err)
+		}
+
+		return 0, file.Path, nil
+	}
+
+	x.Debugf("Writing archived file: %s (packed: %d, unpacked: %d)", file.Path,
+		zipFile.CompressedSize64, zipFile.UncompressedSize64)
+
+	s, err := x.write(file)
+	if err != nil {
+		return s, file.Path, fmt.Errorf("%s: %w: %s (from: %s)", zipFile.FileInfo().Name(), err, file.Path, zipFile.Name)
+	}
+
+	return s, file.Path, nil
 }

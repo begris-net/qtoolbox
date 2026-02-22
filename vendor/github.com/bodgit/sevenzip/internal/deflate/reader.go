@@ -1,7 +1,9 @@
+// Package deflate implements the Deflate decompressor.
 package deflate
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 
@@ -9,42 +11,51 @@ import (
 	"github.com/klauspost/compress/flate"
 )
 
-//nolint:gochecknoglobals
-var flateReaderPool sync.Pool
-
 type readCloser struct {
 	c  io.Closer
 	fr io.ReadCloser
 }
 
+var (
+	//nolint:gochecknoglobals
+	flateReaderPool sync.Pool
+
+	errAlreadyClosed = errors.New("deflate: already closed")
+	errNeedOneReader = errors.New("deflate: need exactly one reader")
+)
+
 func (rc *readCloser) Close() error {
-	var err error
-
-	if rc.c != nil {
-		if err = rc.fr.Close(); err != nil {
-			return err
-		}
-
-		flateReaderPool.Put(rc.fr)
-		err = rc.c.Close()
-		rc.c, rc.fr = nil, nil
+	if rc.c == nil || rc.fr == nil {
+		return errAlreadyClosed
 	}
 
-	return err
+	if err := errors.Join(rc.fr.Close(), rc.c.Close()); err != nil {
+		return fmt.Errorf("deflate: error closing: %w", err)
+	}
+
+	flateReaderPool.Put(rc.fr)
+	rc.c, rc.fr = nil, nil
+
+	return nil
 }
 
 func (rc *readCloser) Read(p []byte) (int, error) {
-	if rc.fr == nil {
-		return 0, errors.New("deflate: Read after Close")
+	if rc.c == nil || rc.fr == nil {
+		return 0, errAlreadyClosed
 	}
 
-	return rc.fr.Read(p)
+	n, err := rc.fr.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		err = fmt.Errorf("deflate: error reading: %w", err)
+	}
+
+	return n, err
 }
 
 // NewReader returns a new DEFLATE io.ReadCloser.
 func NewReader(_ []byte, _ uint64, readers []io.ReadCloser) (io.ReadCloser, error) {
 	if len(readers) != 1 {
-		return nil, errors.New("deflate: need exactly one reader")
+		return nil, errNeedOneReader
 	}
 
 	fr, ok := flateReaderPool.Get().(io.ReadCloser)
@@ -52,7 +63,7 @@ func NewReader(_ []byte, _ uint64, readers []io.ReadCloser) (io.ReadCloser, erro
 		frf, ok := fr.(flate.Resetter)
 		if ok {
 			if err := frf.Reset(util.ByteReadCloser(readers[0]), nil); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("deflate: error resetting: %w", err)
 			}
 		}
 	} else {

@@ -46,9 +46,10 @@ const (
 )
 
 var (
-	errIncompleteRead    = errors.New("sevenzip: incomplete read")
-	errUnexpectedID      = errors.New("sevenzip: unexpected id")
-	errMissingUnpackInfo = errors.New("sevenzip: missing unpack info")
+	errIncompleteRead         = errors.New("sevenzip: incomplete read")
+	errUnexpectedID           = errors.New("sevenzip: unexpected id")
+	errMissingUnpackInfo      = errors.New("sevenzip: missing unpack info")
+	errWrongNumberOfFilenames = errors.New("sevenzip: wrong number of filenames")
 )
 
 func readUint64(r io.ByteReader) (uint64, error) {
@@ -240,7 +241,7 @@ func readCoder(r util.Reader) (*coder, error) {
 		}
 
 		c.properties = make([]byte, size)
-		if n, err := r.Read(c.properties); err != nil || n != int(size) {
+		if n, err := r.Read(c.properties); err != nil || uint64(n) != size { //nolint:gosec
 			if err != nil {
 				return nil, fmt.Errorf("readCoder: Read error: %w", err)
 			}
@@ -314,7 +315,7 @@ func readFolder(r util.Reader) (*folder, error) {
 	return f, nil
 }
 
-//nolint:cyclop,funlen,gocognit
+//nolint:cyclop,funlen
 func readUnpackInfo(r util.Reader) (*unpackInfo, error) {
 	u := new(unpackInfo)
 
@@ -337,10 +338,12 @@ func readUnpackInfo(r util.Reader) (*unpackInfo, error) {
 	}
 
 	if external > 0 {
-		_, err := readUint64(r)
-		if err != nil {
-			return nil, err
-		}
+		/*
+			_, err := readUint64(r)
+			if err != nil {
+				return nil, err
+			}
+		*/
 		// TODO Apparently we seek to this read offset and read the
 		// folder information from there. Not clear if the offset is
 		// absolute for the whole file, or relative to some known
@@ -543,10 +546,12 @@ func readTimes(r util.Reader, count uint64) ([]time.Time, error) {
 	}
 
 	if external > 0 {
-		_, err := readUint64(r)
-		if err != nil {
-			return nil, err
-		}
+		/*
+			_, err := readUint64(r)
+			if err != nil {
+				return nil, err
+			}
+		*/
 		// TODO Apparently we seek to this read offset and read the
 		// folder information from there. Not clear if the offset is
 		// absolute for the whole file, or relative to some known
@@ -593,10 +598,12 @@ func readNames(r util.Reader, count, length uint64) ([]string, error) {
 	}
 
 	if external > 0 {
-		_, err := readUint64(r)
-		if err != nil {
-			return nil, err
-		}
+		/*
+			_, err := readUint64(r)
+			if err != nil {
+				return nil, err
+			}
+		*/
 		// TODO Apparently we seek to this read offset and read the
 		// folder information from there. Not clear if the offset is
 		// absolute for the whole file, or relative to some known
@@ -605,7 +612,7 @@ func readNames(r util.Reader, count, length uint64) ([]string, error) {
 	}
 
 	utf16le := unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
-	scanner := bufio.NewScanner(transform.NewReader(io.LimitReader(r, int64(length-1)), utf16le.NewDecoder()))
+	scanner := bufio.NewScanner(transform.NewReader(io.LimitReader(r, int64(length-1)), utf16le.NewDecoder())) //nolint:gosec,lll
 	scanner.Split(splitNull)
 
 	names, i := make([]string, 0, count), uint64(0)
@@ -619,7 +626,7 @@ func readNames(r util.Reader, count, length uint64) ([]string, error) {
 	}
 
 	if i != count {
-		return nil, errors.New("sevenzip: wrong number of filenames")
+		return nil, errWrongNumberOfFilenames
 	}
 
 	return names, nil
@@ -637,10 +644,12 @@ func readAttributes(r util.Reader, count uint64) ([]uint32, error) {
 	}
 
 	if external > 0 {
-		_, err := readUint64(r)
-		if err != nil {
-			return nil, err
-		}
+		/*
+			_, err := readUint64(r)
+			if err != nil {
+				return nil, err
+			}
+		*/
 		// TODO Apparently we seek to this read offset and read the
 		// folder information from there. Not clear if the offset is
 		// absolute for the whole file, or relative to some known
@@ -765,7 +774,7 @@ func readFilesInfo(r util.Reader) (*filesInfo, error) {
 		case idStartPos:
 			return nil, errors.New("sevenzip: TODO idStartPos") //nolint:goerr113
 		case idDummy:
-			if _, err := io.CopyN(io.Discard, r, int64(length)); err != nil {
+			if _, err := io.CopyN(io.Discard, r, int64(length)); err != nil { //nolint:gosec
 				return nil, fmt.Errorf("readFilesInfo: CopyN error: %w", err)
 			}
 		default:
@@ -786,23 +795,23 @@ func readHeader(r util.Reader) (*header, error) {
 	}
 
 	if id == idArchiveProperties {
-		return nil, errors.New("sevenzip: TODO idArchiveProperties") //nolint:goerr113,revive
-
-		//nolint:govet
-		id, err = r.ReadByte()
-		if err != nil {
-			return nil, fmt.Errorf("readHeader: ReadByte error: %w", err)
-		}
+		/*
+			id, err = r.ReadByte()
+			if err != nil {
+				return nil, fmt.Errorf("readHeader: ReadByte error: %w", err)
+			}
+		*/
+		return nil, errors.New("sevenzip: TODO idArchiveProperties") //nolint:goerr113
 	}
 
 	if id == idAdditionalStreamsInfo {
-		return nil, errors.New("sevenzip: TODO idAdditionalStreamsInfo") //nolint:goerr113,revive
-
-		//nolint:govet
-		id, err = r.ReadByte()
-		if err != nil {
-			return nil, fmt.Errorf("readHeader: ReadByte error: %w", err)
-		}
+		/*
+			id, err = r.ReadByte()
+			if err != nil {
+				return nil, fmt.Errorf("readHeader: ReadByte error: %w", err)
+			}
+		*/
+		return nil, errors.New("sevenzip: TODO idAdditionalStreamsInfo") //nolint:goerr113
 	}
 
 	if id == idMainStreamsInfo {
@@ -842,11 +851,7 @@ func readHeader(r util.Reader) (*header, error) {
 			continue
 		}
 
-		if h.streamsInfo.subStreamsInfo != nil {
-			h.filesInfo.file[i].CRC32 = h.streamsInfo.subStreamsInfo.digest[j]
-		}
-
-		_, h.filesInfo.file[i].UncompressedSize = h.streamsInfo.FileFolderAndSize(j)
+		_, h.filesInfo.file[i].UncompressedSize, h.filesInfo.file[i].CRC32 = h.streamsInfo.FileFolderAndSize(j)
 		j++
 	}
 
