@@ -54,5 +54,5 @@ jobs:
           goarch: ${{ matrix.goarch }}
           goversion: "1.21"
           binary_name: "qtoolbox"
-          ldflags: -X "qtoolbox/main.Version=v${{ env.APP_VERSION }}"
+          ldflags: -X "main.Version=${{ env.APP_VERSION }}"
           extra_files: LICENSE README.md
