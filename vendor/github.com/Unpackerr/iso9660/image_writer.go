@@ -606,7 +606,7 @@ func (iw *ImageWriter) WriteTo(w io.Writer, volumeIdentifier string) error {
 			VolumeSetIdentifier:           "",
 			PublisherIdentifier:           "",
 			DataPreparerIdentifier:        "",
-			ApplicationIdentifier:         "github.com/kdomanski/iso9660",
+			ApplicationIdentifier:         "github.com/Unpackerr/iso9660",
 			CopyrightFileIdentifier:       "",
 			AbstractFileIdentifier:        "",
 			BibliographicFileIdentifier:   "",

@@ -14,6 +14,9 @@ atomicgo.dev/schedule
 github.com/BooleanCat/go-functional/iter
 github.com/BooleanCat/go-functional/option
 github.com/BooleanCat/go-functional/result
+# github.com/Unpackerr/iso9660 v0.0.3
+## explicit; go 1.25.7
+github.com/Unpackerr/iso9660
 # github.com/YoshikiShibata/gostream v0.0.0-20231110221303-1f6d7dc07388
 ## explicit; go 1.21
 github.com/YoshikiShibata/gostream
@@ -89,6 +92,9 @@ github.com/hashicorp/golang-lru/v2/simplelru
 ## explicit; go 1.20
 github.com/icholy/digest
 github.com/icholy/digest/internal/param
+# github.com/icza/bitio v1.1.0
+## explicit; go 1.13
+github.com/icza/bitio
 # github.com/imroc/req/v3 v3.57.0
 ## explicit; go 1.24.0
 github.com/imroc/req/v3
@@ -118,9 +124,6 @@ github.com/inconshreveable/mousetrap
 # github.com/juju/errors v1.0.0
 ## explicit; go 1.18
 github.com/juju/errors
-# github.com/kdomanski/iso9660 v0.4.0
-## explicit; go 1.19
-github.com/kdomanski/iso9660
 # github.com/klauspost/compress v1.18.4
 ## explicit; go 1.23
 github.com/klauspost/compress
@@ -147,6 +150,24 @@ github.com/mariomac/gostream/stream
 # github.com/mattn/go-runewidth v0.0.20
 ## explicit; go 1.20
 github.com/mattn/go-runewidth
+# github.com/mewkiz/flac v1.0.13
+## explicit; go 1.23.2
+github.com/mewkiz/flac
+github.com/mewkiz/flac/frame
+github.com/mewkiz/flac/internal/bits
+github.com/mewkiz/flac/internal/bufseekio
+github.com/mewkiz/flac/internal/hashutil
+github.com/mewkiz/flac/internal/hashutil/crc16
+github.com/mewkiz/flac/internal/hashutil/crc8
+github.com/mewkiz/flac/internal/ioutilx
+github.com/mewkiz/flac/internal/utf8
+github.com/mewkiz/flac/meta
+# github.com/mewkiz/pkg v0.0.0-20250417130911-3f050ff8c56d
+## explicit; go 1.23.2
+github.com/mewkiz/pkg/errutil
+# github.com/mewpkg/term v0.0.0-20241026122259-37a80af23985
+## explicit; go 1.23.2
+github.com/mewpkg/term
 # github.com/mitchellh/go-homedir v1.1.0
 ## explicit
 github.com/mitchellh/go-homedir
@@ -156,7 +177,7 @@ github.com/nwaples/rardecode/v2
 # github.com/peterebden/ar v0.0.0-20241106141004-20dc11b778e8
 ## explicit; go 1.19
 github.com/peterebden/ar
-# github.com/pierrec/lz4/v4 v4.1.25
+# github.com/pierrec/lz4/v4 v4.1.26
 ## explicit; go 1.17
 github.com/pierrec/lz4/v4
 github.com/pierrec/lz4/v4/internal/lz4block
@@ -203,6 +224,9 @@ github.com/refraction-networking/utls/internal/quicvarint
 github.com/refraction-networking/utls/internal/quicvarint/protocol
 github.com/refraction-networking/utls/internal/tls12
 github.com/refraction-networking/utls/internal/tls13
+# github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
+## explicit
+github.com/saintfish/chardet
 # github.com/spf13/afero v1.15.0
 ## explicit; go 1.23.0
 github.com/spf13/afero
@@ -300,8 +324,11 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# golift.io/xtractr v0.3.0
-## explicit; go 1.24.0
+# golift.io/udf v0.0.1
+## explicit; go 1.25.6
+golift.io/udf
+# golift.io/xtractr v0.3.1
+## explicit; go 1.25.7
 golift.io/xtractr
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
