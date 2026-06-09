@@ -16,7 +16,13 @@ linters:
           - goconst
           - wsl
           - errcheck
+          - err113
         path: .+_test.go
+      - linters:
+          - cyclop
+          - funlen
+          - ireturn
+        path: chardet\.go
 
   settings:
     gosec:

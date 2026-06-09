@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kdomanski/iso9660"
+	"github.com/Unpackerr/iso9660"
 )
 
 // ExtractISO writes an ISO's contents to disk.
+// It tries UDF first (which preserves full filenames), then falls back
+// to ISO9660 (with Joliet support) if UDF parsing fails.
 func ExtractISO(xFile *XFile) (size uint64, filesList []string, err error) {
 	openISO, err := os.Open(xFile.FilePath) // os.Open on purpose.
 	if err != nil {
@@ -17,7 +19,20 @@ func ExtractISO(xFile *XFile) (size uint64, filesList []string, err error) {
 	}
 	defer openISO.Close()
 
-	image, _ := iso9660.OpenImage(openISO)
+	// Try UDF first — it preserves full-length filenames.
+	size, filesList, udfErr := extractUDF(xFile, openISO)
+	if udfErr == nil {
+		xFile.Debugf("Extracted %s via UDF path", xFile.FilePath)
+		return size, filesList, nil
+	}
+
+	xFile.Debugf("UDF extraction failed for %s, falling back to ISO9660: %v", xFile.FilePath, udfErr)
+
+	// Fall back to ISO9660 (now with Joliet support for full filenames).
+	image, isoErr := iso9660.OpenImage(openISO)
+	if isoErr != nil {
+		return 0, nil, fmt.Errorf("failed to open iso image: %s: %w", xFile.FilePath, isoErr)
+	}
 
 	defer xFile.newProgress(getUncompressedIsoSize(image)).done()
 
@@ -31,6 +46,7 @@ func ExtractISO(xFile *XFile) (size uint64, filesList []string, err error) {
 		return 0, nil, fmt.Errorf("failed to open iso root: %s: %w", xFile.FilePath, err)
 	}
 
+	// Extract directly to output directory (no ISO-name subfolder).
 	size, files, err := xFile.uniso(root, "")
 	if err != nil {
 		return size, files, fmt.Errorf("%s: %w", xFile.FilePath, err)
@@ -74,17 +90,19 @@ func getUncompressedIsoSize(image *iso9660.Image) (total, _ uint64, count int) {
 func (x *XFile) uniso(isoFile *iso9660.File, parent string) (uint64, []string, error) {
 	itemName := filepath.Join(parent, isoFile.Name())
 
-	if isoFile.Name() == string([]byte{0}) { // rename root folder.
-		itemName = strings.TrimSuffix(strings.TrimSuffix(filepath.Base(x.FilePath), ".iso"), ".ISO")
+	if isoFile.Name() == string([]byte{0}) { // root directory - extract to output dir directly.
+		itemName = ""
 	}
 
 	if !isoFile.IsDir() { // it's a file
 		return x.unisofile(isoFile, itemName)
 	}
 
-	err := x.mkDir(filepath.Join(x.OutputDir, itemName), isoFile.Mode(), isoFile.ModTime())
-	if err != nil {
-		return 0, nil, fmt.Errorf("making iso directory %s: %w", isoFile.Name(), err)
+	if itemName != "" {
+		err := x.mkDir(filepath.Join(x.OutputDir, itemName), isoFile.Mode(), isoFile.ModTime())
+		if err != nil {
+			return 0, nil, fmt.Errorf("making iso directory %s: %w", isoFile.Name(), err)
+		}
 	}
 
 	children, err := isoFile.GetChildren()

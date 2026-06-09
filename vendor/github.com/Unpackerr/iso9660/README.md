@@ -1,7 +1,6 @@
 ## iso9660
-[![Go Reference](https://pkg.go.dev/badge/github.com/kdomanski/iso9660.svg)](https://pkg.go.dev/github.com/kdomanski/iso9660)
-[![codecov](https://codecov.io/gh/kdomanski/iso9660/branch/master/graph/badge.svg?token=14MJSZYZ24)](https://codecov.io/gh/kdomanski/iso9660)
-[![Go Report Card](https://goreportcard.com/badge/github.com/kdomanski/iso9660)](https://goreportcard.com/report/github.com/kdomanski/iso9660)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Unpackerr/iso9660.svg)](https://pkg.go.dev/github.com/Unpackerr/iso9660)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Unpackerr/iso9660)](https://goreportcard.com/report/github.com/Unpackerr/iso9660)
 
 A package for reading and creating ISO9660
 
@@ -28,7 +27,7 @@ package main
 import (
   "log"
 
-  "github.com/kdomanski/iso9660/util"
+  "github.com/Unpackerr/iso9660/util"
 )
 
 func main() {
@@ -53,7 +52,7 @@ import (
   "log"
   "os"
 
-  "github.com/kdomanski/iso9660"
+  "github.com/Unpackerr/iso9660"
 )
 
 func main() {
@@ -103,7 +102,7 @@ import (
   "path/filepath"
   "strings"
 
-  "github.com/kdomanski/iso9660"
+  "github.com/Unpackerr/iso9660"
 )
 
 func main() {

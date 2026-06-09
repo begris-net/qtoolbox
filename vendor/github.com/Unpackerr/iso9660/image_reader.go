@@ -1,11 +1,13 @@
 package iso9660
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 // Image is a wrapper around an image file that allows reading its ISO9660 data
@@ -51,9 +53,18 @@ func (i *Image) readVolumes() error {
 	return nil
 }
 
-// RootDir returns the File structure corresponding to the root directory
-// of the first primary volume
+// RootDir returns the File structure corresponding to the root directory.
+// It prefers a Joliet supplementary volume descriptor (which provides full
+// Unicode filenames) over the primary volume descriptor.
 func (i *Image) RootDir() (*File, error) {
+	// Check for Joliet supplementary VD first.
+	for _, vd := range i.volumeDescriptors {
+		if vd.isJoliet() {
+			return &File{de: vd.Primary.RootDirectoryEntry, ra: i.ra, children: nil, isRootDir: true, joliet: true}, nil
+		}
+	}
+
+	// Fall back to primary VD.
 	for _, vd := range i.volumeDescriptors {
 		if vd.Type() == volumeTypePrimary {
 			return &File{de: vd.Primary.RootDirectoryEntry, ra: i.ra, children: nil, isRootDir: true}, nil
@@ -72,6 +83,12 @@ func (i *Image) Label() (string, error) {
 	return "", os.ErrNotExist
 }
 
+// extent describes a single contiguous region of data on the disc.
+type extent struct {
+	Location int32
+	Length   uint32
+}
+
 // File is a os.FileInfo-compatible wrapper around an ISO9660 directory entry
 type File struct {
 	ra        io.ReaderAt
@@ -79,6 +96,10 @@ type File struct {
 	children  []*File
 	isRootDir bool
 	susp      *SUSPMetadata
+	joliet    bool
+	// extents holds all extents for multi-extent files (ECMA-119 9.1.6).
+	// For single-extent files this is nil and de.ExtentLocation/ExtentLength are used directly.
+	extents []extent
 }
 
 var _ os.FileInfo = &File{}
@@ -96,6 +117,11 @@ func (f *File) IsDir() bool {
 	}
 
 	return f.de.FileFlags&dirFlagDir != 0
+}
+
+// HasMultiExtent is for 'testing' ISO data.
+func (f *File) HasMultiExtent() bool {
+	return f.de.FileFlags&dirFlagMultiExtent != 0
 }
 
 // ModTime returns the entry's recording time
@@ -127,6 +153,15 @@ func (f *File) Name() string {
 		}
 	}
 
+	// Joliet names are already decoded to UTF-8; just strip any trailing ";1".
+	if f.joliet {
+		name := f.de.Identifier
+		if idx := strings.LastIndex(name, ";"); idx >= 0 {
+			name = name[:idx]
+		}
+		return name
+	}
+
 	if f.IsDir() {
 		return f.de.Identifier
 	}
@@ -153,8 +188,16 @@ func (f *File) Name() string {
 	return fileIdentifier
 }
 
-// Size returns the size in bytes of the extent occupied by the file or directory
+// Size returns the size in bytes of the extent occupied by the file or directory.
+// For multi-extent files, this returns the total size across all extents.
 func (f *File) Size() int64 {
+	if len(f.extents) > 0 {
+		var total int64
+		for _, ext := range f.extents {
+			total += int64(ext.Length)
+		}
+		return total
+	}
 	return int64(f.de.ExtentLength)
 }
 
@@ -176,6 +219,11 @@ func (f *File) GetAllChildren() ([]*File, error) {
 
 	baseOffset := uint32(f.de.ExtentLocation) * sectorSize
 
+	// pendingExtents collects extents for a multi-extent file (ECMA-119 9.1.6).
+	// When we see directory records with the multi-extent flag set, we accumulate
+	// their extents here until we reach the final record (without the flag).
+	var pendingExtents []extent
+
 	buffer := make([]byte, sectorSize)
 	for bytesProcessed := uint32(0); bytesProcessed < uint32(f.de.ExtentLength); bytesProcessed += sectorSize {
 		if _, err := f.ra.ReadAt(buffer, int64(baseOffset+bytesProcessed)); err != nil {
@@ -195,6 +243,11 @@ func (f *File) GetAllChildren() ([]*File, error) {
 			newDE := &DirectoryEntry{}
 			if err := newDE.UnmarshalBinary(buffer[i : i+entryLength]); err != nil {
 				return nil, err
+			}
+
+			// Decode Joliet UTF-16BE identifiers to UTF-8.
+			if f.joliet && len(newDE.Identifier) > 1 {
+				newDE.Identifier = decodeJolietIdentifier([]byte(newDE.Identifier))
 			}
 
 			// Is this a root directory '.' record?
@@ -230,10 +283,33 @@ func (f *File) GetAllChildren() ([]*File, error) {
 
 			i += entryLength
 
-			newFile := &File{ra: f.ra,
+			// Check for multi-extent flag (ECMA-119 9.1.6, bit 7 of FileFlags).
+			// When set, this directory record is not the final one for this file.
+			// Consecutive records should have their extents concatenated.
+			if newDE.FileFlags&dirFlagMultiExtent != 0 {
+				pendingExtents = append(pendingExtents, extent{
+					Location: newDE.ExtentLocation,
+					Length:   newDE.ExtentLength,
+				})
+				continue
+			}
+
+			newFile := &File{
+				ra:       f.ra,
 				de:       newDE,
 				children: nil,
 				susp:     f.susp.Clone(),
+				joliet:   f.joliet,
+			}
+
+			// If we accumulated multi-extent records, finalize them now.
+			if len(pendingExtents) > 0 {
+				pendingExtents = append(pendingExtents, extent{
+					Location: newDE.ExtentLocation,
+					Length:   newDE.ExtentLength,
+				})
+				newFile.extents = pendingExtents
+				pendingExtents = nil
 			}
 
 			f.children = append(f.children, newFile)
@@ -282,11 +358,36 @@ func (f *File) GetDotEntry() (*File, error) {
 
 // Reader returns a reader that allows to read the file's data.
 // If File is a directory, it returns nil.
+// For multi-extent files (ECMA-119 9.1.6), the returned reader
+// seamlessly reads across all extents.
 func (f *File) Reader() io.Reader {
 	if f.IsDir() {
 		return nil
 	}
 
+	if len(f.extents) > 1 {
+		readers := make([]io.Reader, len(f.extents))
+		for i, ext := range f.extents {
+			offset := int64(ext.Location) * int64(sectorSize)
+			readers[i] = io.NewSectionReader(f.ra, offset, int64(ext.Length))
+		}
+		return io.MultiReader(readers...)
+	}
+
 	baseOffset := int64(f.de.ExtentLocation) * int64(sectorSize)
 	return io.NewSectionReader(f.ra, baseOffset, int64(f.de.ExtentLength))
+}
+
+// decodeJolietIdentifier decodes a UTF-16BE encoded Joliet identifier to UTF-8.
+func decodeJolietIdentifier(raw []byte) string {
+	if len(raw)%2 != 0 {
+		return string(raw)
+	}
+
+	u16 := make([]uint16, len(raw)/2)
+	for i := range u16 {
+		u16[i] = binary.BigEndian.Uint16(raw[2*i : 2*i+2])
+	}
+
+	return string(utf16.Decode(u16))
 }

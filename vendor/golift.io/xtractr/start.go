@@ -1,7 +1,6 @@
 package xtractr
 
 import (
-	"errors"
 	"os"
 )
 
@@ -26,6 +25,11 @@ type Config struct {
 	BuffSize int
 	// Number of concurrent extractions allowed.
 	Parallel int
+	// FileWorkers controls how many files within a single archive are extracted
+	// concurrently. Only effective for random-access formats (ZIP, 7z).
+	// Streaming formats ignore this. 0 or 1 = sequential (current behavior).
+	// Total concurrent I/O = Parallel * FileWorkers.
+	FileWorkers int
 	// Filemode used when writing files, tar ignores this, so does Windows.
 	FileMode os.FileMode
 	// Filemode used when writing folders, tar ignores this.
@@ -52,18 +56,6 @@ type Xtractr struct {
 	queue  chan *Xtract
 	done   chan struct{}
 }
-
-// Custom errors returned by this module.
-var (
-	ErrQueueStopped       = errors.New("extractor queue stopped, cannot extract")
-	ErrNoCompressedFiles  = errors.New("no compressed files found")
-	ErrUnknownArchiveType = errors.New("unknown archive file type")
-	ErrInvalidPath        = errors.New("archived file contains invalid path")
-	ErrInvalidHead        = errors.New("archived file contains invalid header file")
-	ErrQueueRunning       = errors.New("extractor queue running, cannot start")
-	ErrNoConfig           = errors.New("call NewQueue() to initialize a queue")
-	ErrNoLogger           = errors.New("xtractr.Config.Logger must be non-nil")
-)
 
 // NewQueue returns a new Xtractr Queue you can send Xtract jobs into.
 // This is where to start if you're creating an extractor queue.
@@ -117,6 +109,10 @@ func parseConfig(config *Config) *Xtractr {
 
 	if config.Parallel < 1 {
 		config.Parallel = 1
+	}
+
+	if config.FileWorkers < 1 {
+		config.FileWorkers = 1
 	}
 
 	if config.BuffSize == 0 {

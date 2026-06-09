@@ -77,6 +77,9 @@ type Response struct {
 	Archives ArchiveList
 	// Files written to final path.
 	NewFiles []string
+	// SkipOnRecursion lists paths that extractors copied into output (e.g. CUE sheet)
+	// and must not be re-extracted when recursing. Other files (e.g. CUE from a RAR) are still extracted.
+	SkipOnRecursion []string
 	// Error encountered, only when done=true.
 	Error error
 	// Copied from input data.
@@ -174,15 +177,17 @@ func (x *Xtractr) decompressFolders(resp *Response) error {
 					Path:          subDir,
 					ExcludeSuffix: resp.X.ExcludeSuffix,
 				},
-				Name:       resp.X.Name,
-				Password:   resp.X.Password,
-				Passwords:  resp.X.Passwords,
-				ExtractTo:  resp.X.ExtractTo,
-				DeleteOrig: resp.X.DeleteOrig,
-				TempFolder: resp.X.TempFolder,
-				LogFile:    resp.X.LogFile,
-				Updates:    resp.X.Updates,
-				Progress:   resp.X.Progress,
+				Name:             resp.X.Name,
+				Password:         resp.X.Password,
+				Passwords:        resp.X.Passwords,
+				DisableRecursion: resp.X.DisableRecursion,
+				RecurseISO:       resp.X.RecurseISO,
+				ExtractTo:        resp.X.ExtractTo,
+				DeleteOrig:       resp.X.DeleteOrig,
+				TempFolder:       resp.X.TempFolder,
+				LogFile:          resp.X.LogFile,
+				Updates:          resp.X.Updates,
+				Progress:         resp.X.Progress,
 			},
 			Started:  resp.Started,
 			Output:   output,
@@ -257,6 +262,37 @@ func weExtractedAnISO(resp *Response) bool {
 	return false
 }
 
+// excludePathsFromArchiveList returns a copy of list with any archive path that
+// appears in exclude (e.g. resp.SkipOnRecursion) removed.
+func excludePathsFromArchiveList(list ArchiveList, exclude []string) ArchiveList {
+	if len(exclude) == 0 {
+		return list
+	}
+
+	skip := make(map[string]bool, len(exclude))
+	out := make(ArchiveList, len(list))
+
+	for _, p := range exclude {
+		skip[filepath.Clean(p)] = true
+	}
+
+	for dir, archives := range list {
+		keep := make([]string, 0, len(archives))
+
+		for _, p := range archives {
+			if !skip[filepath.Clean(p)] {
+				keep = append(keep, p)
+			}
+		}
+
+		if len(keep) > 0 {
+			out[dir] = keep
+		}
+	}
+
+	return out
+}
+
 // decompressFiles runs after we find and verify archives exist.
 // This extracts everything in the search path then (optionally)
 // checks the output path for more archives that were just decompressed.
@@ -275,6 +311,10 @@ func (x *Xtractr) decompressFiles(resp *Response) error {
 		Path:          resp.Output,
 		ExcludeSuffix: resp.X.ExcludeSuffix,
 	})
+	// Do not try to extract files that an extractor copied into output (e.g. CUE sheet);
+	// re-extracting the copied CUE would fail and delete the output directory.
+	// Other archives in the output (e.g. CUE+FLAC from a RAR) are still extracted.
+	resp.Extras = excludePathsFromArchiveList(resp.Extras, resp.SkipOnRecursion)
 	nre := &Response{
 		X: &Xtract{
 			Password:  resp.X.Password,
@@ -333,27 +373,38 @@ func (x *Xtractr) decompressArchives(resp *Response) error {
 func (x *Xtractr) processArchive(filename string, resp *Response) (uint64, []string, []string, error) {
 	err := os.MkdirAll(resp.Output, x.config.DirMode)
 	if err != nil {
-		return 0, nil, nil, fmt.Errorf("making output dir: %w", err)
+		return 0, nil, nil, NewExtractError(
+			fmt.Errorf("making output dir: %w", err),
+			filename, resp.Output, 0, "directory",
+		)
 	}
 
 	x.config.Debugf("Extracting File: %v to %v", filename, resp.Output)
 
-	bytes, files, archives, err := ExtractFile(&XFile{ // extract the file.
-		FilePath:  filename,
-		OutputDir: resp.Output,
-		FileMode:  x.config.FileMode,
-		DirMode:   x.config.DirMode,
-		Passwords: resp.X.Passwords,
-		Password:  resp.X.Password,
-		log:       x.config.Logger,
-		Updates:   resp.X.Updates,
-		Progress:  resp.X.Progress,
-	})
-	if err != nil {
-		x.DeleteFiles(resp.Output) // clean up the mess after an error and bail.
+	xFile := &XFile{
+		FilePath:    filename,
+		OutputDir:   resp.Output,
+		FileMode:    x.config.FileMode,
+		DirMode:     x.config.DirMode,
+		Passwords:   resp.X.Passwords,
+		Password:    resp.X.Password,
+		FileWorkers: x.config.FileWorkers,
+		log:         x.config.Logger,
+		Updates:     resp.X.Updates,
+		Progress:    resp.X.Progress,
 	}
 
-	return bytes, files, archives, err
+	bytes, files, archives, err := ExtractFile(xFile)
+	if err != nil {
+		x.DeleteFiles(resp.Output) // clean up the mess after an error and bail.
+		return bytes, files, archives, WrapExtractError(err, xFile, bytes, "")
+	}
+
+	if len(xFile.SkipOnRecursion) > 0 {
+		resp.SkipOnRecursion = append(resp.SkipOnRecursion, xFile.SkipOnRecursion...)
+	}
+
+	return bytes, files, archives, nil
 }
 
 func (x *Xtractr) cleanupProcessedArchives(resp *Response) error {
