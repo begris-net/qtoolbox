@@ -189,7 +189,7 @@ github.com/quic-go/quic-go/qlog
 github.com/quic-go/quic-go/qlogwriter
 github.com/quic-go/quic-go/qlogwriter/jsontext
 github.com/quic-go/quic-go/quicvarint
-# github.com/refraction-networking/utls v1.8.1
+# github.com/refraction-networking/utls v1.8.2
 ## explicit; go 1.24
 github.com/refraction-networking/utls
 github.com/refraction-networking/utls/dicttls
