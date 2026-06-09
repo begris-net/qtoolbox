@@ -50,6 +50,9 @@ github.com/cavaliergopher/cpio
 # github.com/cavaliergopher/rpm v1.3.0
 ## explicit; go 1.17
 github.com/cavaliergopher/rpm
+# github.com/clipperhouse/uax29/v2 v2.7.0
+## explicit; go 1.18
+github.com/clipperhouse/uax29/v2/graphemes
 # github.com/codeclysm/extract/v4 v4.0.0
 ## explicit; go 1.22
 github.com/codeclysm/extract/v4
@@ -65,7 +68,7 @@ github.com/google/go-github/v57/github
 # github.com/google/go-querystring v1.1.0
 ## explicit; go 1.10
 github.com/google/go-querystring/query
-# github.com/gookit/color v1.5.4
+# github.com/gookit/color v1.6.0
 ## explicit; go 1.18
 github.com/gookit/color
 # github.com/h2non/filetype v1.1.3
@@ -141,8 +144,8 @@ github.com/lithammer/fuzzysearch/fuzzy
 github.com/mariomac/gostream/item
 github.com/mariomac/gostream/order
 github.com/mariomac/gostream/stream
-# github.com/mattn/go-runewidth v0.0.16
-## explicit; go 1.9
+# github.com/mattn/go-runewidth v0.0.20
+## explicit; go 1.20
 github.com/mattn/go-runewidth
 # github.com/mitchellh/go-homedir v1.1.0
 ## explicit
@@ -160,8 +163,8 @@ github.com/pierrec/lz4/v4/internal/lz4block
 github.com/pierrec/lz4/v4/internal/lz4errors
 github.com/pierrec/lz4/v4/internal/lz4stream
 github.com/pierrec/lz4/v4/internal/xxh32
-# github.com/pterm/pterm v0.12.82
-## explicit; go 1.23.0
+# github.com/pterm/pterm v0.12.83
+## explicit; go 1.24.0
 github.com/pterm/pterm
 github.com/pterm/pterm/internal
 # github.com/quic-go/qpack v0.6.0
@@ -200,9 +203,6 @@ github.com/refraction-networking/utls/internal/quicvarint
 github.com/refraction-networking/utls/internal/quicvarint/protocol
 github.com/refraction-networking/utls/internal/tls12
 github.com/refraction-networking/utls/internal/tls13
-# github.com/rivo/uniseg v0.4.7
-## explicit; go 1.18
-github.com/rivo/uniseg
 # github.com/spf13/afero v1.15.0
 ## explicit; go 1.23.0
 github.com/spf13/afero
