@@ -52,7 +52,7 @@ type Client struct {
 	AllowGetMethodPayload bool
 	*Transport
 	digestAuth              *digestAuth
-	cookiejarFactory        func() *cookiejar.Jar
+	cookiejarFactory        func() http.CookieJar
 	trace                   bool
 	disableAutoReadResponse bool
 	commonErrorType         reflect.Type
@@ -1225,6 +1225,10 @@ func (conn *uTLSConn) ConnectionState() tls.ConnectionState {
 // which uses the specified clientHelloID to simulate the tls fingerprint.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
 func (c *Client) SetTLSFingerprint(clientHelloID utls.ClientHelloID) *Client {
+	c.setTLSFingerprint(clientHelloID, nil)
+	return c
+}
+func (c *Client) setTLSFingerprint(clientHelloID utls.ClientHelloID, uTLSConnApply func(*uTLSConn) error) *Client {
 	fn := func(ctx context.Context, addr string, plainConn net.Conn) (conn net.Conn, tlsState *tls.ConnectionState, err error) {
 		colonPos := strings.LastIndex(addr, ":")
 		if colonPos == -1 {
@@ -1248,6 +1252,11 @@ func (c *Client) SetTLSFingerprint(clientHelloID utls.ClientHelloID) *Client {
 			KeyLogWriter:                tlsConfig.KeyLogWriter,
 		}
 		uconn := &uTLSConn{utls.UClient(plainConn, utlsConfig, clientHelloID)}
+		if uTLSConnApply != nil {
+			if err = uTLSConnApply(uconn); err != nil {
+				return
+			}
+		}
 		err = uconn.HandshakeContext(ctx)
 		if err != nil {
 			return
@@ -1271,6 +1280,18 @@ func (c *Client) SetTLSFingerprint(clientHelloID utls.ClientHelloID) *Client {
 		return
 	}
 	c.Transport.SetTLSHandshake(fn)
+	return c
+}
+
+// SetTLSFingerprintSpec set the tls fingerprint for tls handshake using a custom
+// ClientHelloSpec, which allows fine-grained control over the TLS fingerprint
+// (e.g. for JA3/JA4 customization). Uses utls
+// (https://github.com/refraction-networking/utls) to perform the tls handshake.
+// Note this is valid for HTTP1 and HTTP2, not HTTP3.
+func (c *Client) SetTLSFingerprintSpec(clientHelloID *utls.ClientHelloSpec) *Client {
+	c.setTLSFingerprint(utls.HelloCustom, func(conn *uTLSConn) error {
+		return conn.ApplyPreset(clientHelloID)
+	})
 	return c
 }
 
@@ -1557,7 +1578,7 @@ func (c *Client) Clone() *Client {
 	return &cc
 }
 
-func memoryCookieJarFactory() *cookiejar.Jar {
+func memoryCookieJarFactory() http.CookieJar {
 	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	return jar
 }
@@ -1604,7 +1625,7 @@ func C() *Client {
 // cookie jar that store cookies for underlying `http.Client`. After client clone,
 // the cookie jar of the new client will also be regenerated using this factory
 // function.
-func (c *Client) SetCookieJarFactory(factory func() *cookiejar.Jar) *Client {
+func (c *Client) SetCookieJarFactory(factory func() http.CookieJar) *Client {
 	c.cookiejarFactory = factory
 	c.initCookieJar()
 	return c
