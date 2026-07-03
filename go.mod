@@ -9,7 +9,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/google/go-github/v57 v57.0.0
 	github.com/hashicorp/go-version v1.9.0
-	github.com/imroc/req/v3 v3.58.0
+	github.com/imroc/req/v3 v3.59.0
 	github.com/mariomac/gostream v0.10.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pterm/pterm v0.12.83
@@ -49,7 +49,7 @@ require (
 	github.com/peterebden/ar v0.0.0-20241106141004-20dc11b778e8 // indirect
 	github.com/pierrec/lz4/v4 v4.1.27 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.1 // indirect
+	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect
 	github.com/spf13/afero v1.15.0 // indirect

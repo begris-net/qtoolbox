@@ -97,8 +97,8 @@ github.com/icholy/digest/internal/param
 # github.com/icza/bitio v1.1.0
 ## explicit; go 1.13
 github.com/icza/bitio
-# github.com/imroc/req/v3 v3.58.0
-## explicit; go 1.24.0
+# github.com/imroc/req/v3 v3.59.0
+## explicit; go 1.25.0
 github.com/imroc/req/v3
 github.com/imroc/req/v3/http2
 github.com/imroc/req/v3/internal
@@ -193,8 +193,8 @@ github.com/pterm/pterm/internal
 # github.com/quic-go/qpack v0.6.0
 ## explicit; go 1.24
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.59.1
-## explicit; go 1.24
+# github.com/quic-go/quic-go v0.60.0
+## explicit; go 1.25.0
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/http3/qlog
 github.com/quic-go/quic-go/internal/ackhandler
