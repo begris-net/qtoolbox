@@ -123,29 +123,95 @@ func writeMultipartFormFile(w *multipart.Writer, file *FileUpload, r *Request) e
 	return err
 }
 
-func writeMultiPart(r *Request, w *multipart.Writer) {
-	defer w.Close() // close multipart to write tailer boundary
+func writeMultiPart(r *Request, w *multipart.Writer) error {
 	if len(r.FormData) > 0 {
 		for k, vs := range r.FormData {
 			for _, v := range vs {
-				w.WriteField(k, v)
+				if err := w.WriteField(k, v); err != nil {
+					return err
+				}
 			}
 		}
 	} else if len(r.OrderedFormData) > 0 {
 		if len(r.OrderedFormData)%2 != 0 {
-			r.error = errBadOrderedFormData
-			return
+			return errBadOrderedFormData
 		}
 		maxIndex := len(r.OrderedFormData) - 2
 		for i := 0; i <= maxIndex; i += 2 {
 			key := r.OrderedFormData[i]
 			value := r.OrderedFormData[i+1]
-			w.WriteField(key, value)
+			if err := w.WriteField(key, value); err != nil {
+				return err
+			}
 		}
 	}
 	for _, file := range r.uploadFiles {
-		writeMultipartFormFile(w, file, r)
+		if err := writeMultipartFormFile(w, file, r); err != nil {
+			return err
+		}
 	}
+	return w.Close() // close multipart to write trailing boundary
+}
+
+type countingWriter struct {
+	n int64
+}
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	w.n += int64(len(p))
+	return len(p), nil
+}
+
+func multipartContentLength(r *Request, boundary string) (int64, bool, error) {
+	cw := new(countingWriter)
+	w := multipart.NewWriter(cw)
+	if err := w.SetBoundary(boundary); err != nil {
+		return 0, false, err
+	}
+	if len(r.FormData) > 0 {
+		for k, vs := range r.FormData {
+			for _, v := range vs {
+				if err := w.WriteField(k, v); err != nil {
+					return 0, false, err
+				}
+			}
+		}
+	} else if len(r.OrderedFormData) > 0 {
+		if len(r.OrderedFormData)%2 != 0 {
+			return 0, false, errBadOrderedFormData
+		}
+		for i := 0; i < len(r.OrderedFormData); i += 2 {
+			if err := w.WriteField(r.OrderedFormData[i], r.OrderedFormData[i+1]); err != nil {
+				return 0, false, err
+			}
+		}
+	}
+	for _, file := range r.uploadFiles {
+		if file.FileSize <= 0 || file.ContentType == "" {
+			return 0, false, nil
+		}
+		if _, err := w.CreatePart(createMultipartHeader(file, file.ContentType)); err != nil {
+			return 0, false, err
+		}
+		cw.n += file.FileSize
+	}
+	if err := w.Close(); err != nil {
+		return 0, false, err
+	}
+	return cw.n, true, nil
+}
+
+func multipartBody(r *Request, boundary string) io.ReadCloser {
+	pr, pw := io.Pipe()
+	go func() {
+		w := multipart.NewWriter(pw)
+		if err := w.SetBoundary(boundary); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		pw.CloseWithError(writeMultiPart(r, w))
+	}()
+	return pr
 }
 
 func handleMultiPart(c *Client, r *Request) (err error) {
@@ -154,32 +220,28 @@ func handleMultiPart(c *Client, r *Request) (err error) {
 		b = c.multipartBoundaryFunc()
 	}
 
-	if r.forceChunkedEncoding {
-		pr, pw := io.Pipe()
-		r.GetBody = func() (io.ReadCloser, error) {
-			return pr, nil
+	w := multipart.NewWriter(io.Discard)
+	if len(b) > 0 {
+		if err = w.SetBoundary(b); err != nil {
+			return err
 		}
-		w := multipart.NewWriter(pw)
-		if len(b) > 0 {
-			w.SetBoundary(b)
+	}
+	boundary := w.Boundary()
+	r.SetContentType(w.FormDataContentType())
+	r.Body = nil
+	r.GetBody = func() (io.ReadCloser, error) {
+		return multipartBody(r, boundary), nil
+	}
+	r.contentLength = -1
+	if !r.forceChunkedEncoding {
+		var known bool
+		r.contentLength, known, err = multipartContentLength(r, boundary)
+		if err != nil {
+			return err
 		}
-		r.SetContentType(w.FormDataContentType())
-		go func() {
-			writeMultiPart(r, w)
-			pw.Close() // close pipe writer so that pipe reader could get EOF, and stop upload
-		}()
-	} else {
-		buf := new(bytes.Buffer)
-		w := multipart.NewWriter(buf)
-		if len(b) > 0 {
-			w.SetBoundary(b)
+		if !known {
+			r.contentLength = -1
 		}
-		writeMultiPart(r, w)
-		r.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
-		}
-		r.Body = buf.Bytes()
-		r.SetContentType(w.FormDataContentType())
 	}
 	return
 }
@@ -409,6 +471,13 @@ func (r *callbackReader) Read(p []byte) (n int, err error) {
 
 func handleDownload(c *Client, r *Response) (err error) {
 	if r.Response == nil || !r.Request.isSaveResponse {
+		return nil
+	}
+	// Content-Length early reject replaces the body with http.NoBody. Skip
+	// download in that case so we do not create an empty output file. Other
+	// prior errors (e.g. result unmarshalling) still allow the download path
+	// when the body was already buffered.
+	if errors.Is(r.Err, ErrResponseBodyTooLarge) && r.body == nil {
 		return nil
 	}
 	var body io.ReadCloser
