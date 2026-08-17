@@ -363,6 +363,12 @@ func EnableAutoReadResponse() *Client {
 	return defaultClient.EnableAutoReadResponse()
 }
 
+// SetMaxResponseSize is a global wrapper methods which delegated
+// to the default client's Client.SetMaxResponseSize.
+func SetMaxResponseSize(max int64) *Client {
+	return defaultClient.SetMaxResponseSize(max)
+}
+
 // SetAutoDecodeContentType is a global wrapper methods which delegated
 // to the default client's Client.SetAutoDecodeContentType.
 func SetAutoDecodeContentType(contentTypes ...string) *Client {
@@ -739,6 +745,18 @@ func SetResponseBodyTransformer(fn func(rawBody []byte, req *Request, resp *Resp
 // to the default client's Client.SetUnixSocket.
 func SetUnixSocket(file string) *Client {
 	return defaultClient.SetUnixSocket(file)
+}
+
+// SetResolver is a global wrapper methods which delegated
+// to the default client's Client.SetResolver.
+func SetResolver(r *net.Resolver) *Client {
+	return defaultClient.SetResolver(r)
+}
+
+// SetHosts is a global wrapper methods which delegated
+// to the default client's Client.SetHosts.
+func SetHosts(hosts map[string]string) *Client {
+	return defaultClient.SetHosts(hosts)
 }
 
 // SetTLSFingerprint is a global wrapper methods which delegated
