@@ -39,6 +39,7 @@ type Request struct {
 	Method          string
 	Body            []byte
 	GetBody         GetContentFunc
+	contentLength   int64
 	// URL is an auto-generated field, and is nil in request middleware (OnBeforeRequest),
 	// consider using RawURL if you want, it's not nil in client middleware (WrapRoundTripFunc)
 	URL *urlpkg.URL
@@ -54,20 +55,23 @@ type Request struct {
 	uploadCallbackInterval   time.Duration
 	downloadCallback         DownloadCallback
 	downloadCallbackInterval time.Duration
-	unReplayableBody         io.ReadCloser
-	retryOption              *retryOption
-	bodyReadCloser           io.ReadCloser
-	dumpOptions              *DumpOptions
-	marshalBody              any
-	ctx                      context.Context
-	uploadFiles              []*FileUpload
-	uploadReader             []io.ReadCloser
-	outputFile               string
-	output                   io.Writer
-	trace                    *clientTrace
-	dumpBuffer               *bytes.Buffer
-	responseReturnTime       time.Time
-	afterResponse            []ResponseMiddleware
+	// maxResponseSize, when non-nil, overrides Client.maxResponseSize for this
+	// request. A pointed-to value of 0 means no limit for this request.
+	maxResponseSize    *int64
+	unReplayableBody   io.ReadCloser
+	retryOption        *RetryOption
+	bodyReadCloser     io.ReadCloser
+	dumpOptions        *DumpOptions
+	marshalBody        any
+	ctx                context.Context
+	uploadFiles        []*FileUpload
+	uploadReader       []io.ReadCloser
+	outputFile         string
+	output             io.Writer
+	trace              *clientTrace
+	dumpBuffer         *bytes.Buffer
+	responseReturnTime time.Time
+	afterResponse      []ResponseMiddleware
 }
 
 type GetContentFunc func() (io.ReadCloser, error)
@@ -262,14 +266,16 @@ func (r *Request) SetQueryParamsFromStruct(v any) *Request {
 
 // SetFileReader set up a multipart form with a reader to upload file.
 func (r *Request) SetFileReader(paramName, filename string, reader io.Reader) *Request {
+	if rc, ok := reader.(io.ReadCloser); ok {
+		r.unReplayableBody = rc
+	} else {
+		r.unReplayableBody = io.NopCloser(reader)
+	}
 	r.SetFileUpload(FileUpload{
 		ParamName: paramName,
 		FileName:  filename,
 		GetFileContent: func() (io.ReadCloser, error) {
-			if rc, ok := reader.(io.ReadCloser); ok {
-				return rc, nil
-			}
-			return io.NopCloser(reader), nil
+			return r.unReplayableBody, nil
 		},
 	})
 	return r
@@ -278,8 +284,10 @@ func (r *Request) SetFileReader(paramName, filename string, reader io.Reader) *R
 // SetFileBytes set up a multipart form with given []byte to upload.
 func (r *Request) SetFileBytes(paramName, filename string, content []byte) *Request {
 	r.SetFileUpload(FileUpload{
-		ParamName: paramName,
-		FileName:  filename,
+		ParamName:   paramName,
+		FileName:    filename,
+		FileSize:    int64(len(content)),
+		ContentType: http.DetectContentType(content),
 		GetFileContent: func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(content)), nil
 		},
@@ -307,8 +315,17 @@ func (r *Request) SetFile(paramName, filePath string) *Request {
 	}
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
+		file.Close()
 		r.client.log.Errorf("failed to stat file %s: %v", filePath, err)
 		r.appendError(err)
+		return r
+	}
+	cbuf := make([]byte, 512)
+	n, readErr := file.Read(cbuf)
+	file.Close()
+	if readErr != nil && readErr != io.EOF {
+		r.client.log.Errorf("failed to read %s: %v", filePath, readErr)
+		r.appendError(readErr)
 		return r
 	}
 	r.isMultiPart = true
@@ -316,15 +333,10 @@ func (r *Request) SetFile(paramName, filePath string) *Request {
 		ParamName: paramName,
 		FileName:  filepath.Base(filePath),
 		GetFileContent: func() (io.ReadCloser, error) {
-			if r.RetryAttempt > 0 {
-				file, err = os.Open(filePath)
-				if err != nil {
-					return nil, err
-				}
-			}
-			return file, nil
+			return os.Open(filePath)
 		},
-		FileSize: fileInfo.Size(),
+		FileSize:    fileInfo.Size(),
+		ContentType: http.DetectContentType(cbuf[:n]),
 	})
 }
 
@@ -663,6 +675,60 @@ func (r *Request) Do(ctx ...context.Context) *Response {
 	return resp
 }
 
+func (r *Request) shouldRetry(resp *Response, err error) bool {
+	if errors.Is(err, context.Canceled) || r.retryOption == nil ||
+		(r.RetryAttempt >= r.retryOption.MaxRetries && r.retryOption.MaxRetries >= 0) {
+		return false
+	}
+	needRetry := err != nil
+	if l := len(r.retryOption.RetryConditions); l > 0 {
+		for i := l - 1; i >= 0; i-- {
+			needRetry = r.retryOption.RetryConditions[i](resp, err)
+			if needRetry {
+				break
+			}
+		}
+	}
+	return needRetry
+}
+
+func (r *Request) prepareRetry(resp *Response, err error) {
+	r.RetryAttempt++
+	if l := len(r.retryOption.RetryHooks); l > 0 {
+		for i := l - 1; i >= 0; i-- {
+			r.retryOption.RetryHooks[i](resp, err)
+		}
+	}
+	time.Sleep(r.retryOption.GetRetryInterval(resp, r.RetryAttempt))
+
+	if r.dumpBuffer != nil {
+		r.dumpBuffer.Reset()
+	}
+	if r.trace != nil {
+		r.trace = &clientTrace{}
+	}
+	if resp != nil {
+		resp.body = nil
+		resp.result = nil
+		resp.error = nil
+	}
+}
+
+// tryRetry attempts retry after an error. Returns true if the request loop should continue.
+func (r *Request) tryRetry(resp **Response, err error) bool {
+	if *resp == nil {
+		*resp = &Response{Request: r}
+	}
+	if err != nil {
+		(*resp).Err = err
+	}
+	if !r.shouldRetry(*resp, err) {
+		return false
+	}
+	r.prepareRetry(*resp, err)
+	return true
+}
+
 func (r *Request) do() (resp *Response, err error) {
 	defer func() {
 		if resp == nil {
@@ -673,12 +739,16 @@ func (r *Request) do() (resp *Response, err error) {
 		}
 	}()
 
+retry:
 	for {
 		if r.Headers == nil {
 			r.Headers = make(http.Header)
 		}
 		for _, f := range r.client.udBeforeRequest {
 			if err = f(r.client, r); err != nil {
+				if r.tryRetry(&resp, err) {
+					continue retry
+				}
 				return
 			}
 		}
@@ -704,43 +774,12 @@ func (r *Request) do() (resp *Response, err error) {
 			}
 		}
 
-		if contextCanceled || r.retryOption == nil || (r.RetryAttempt >= r.retryOption.MaxRetries && r.retryOption.MaxRetries >= 0) { // absolutely cannot retry.
+		if contextCanceled {
 			return
 		}
-
-		// check retry whether is needed.
-		needRetry := err != nil                             // default behaviour: retry if error occurs
-		if l := len(r.retryOption.RetryConditions); l > 0 { // override default behaviour if custom RetryConditions has been set.
-			for i := l - 1; i >= 0; i-- {
-				needRetry = r.retryOption.RetryConditions[i](resp, err)
-				if needRetry {
-					break
-				}
-			}
-		}
-		if !needRetry { // no retry is needed.
+		if !r.tryRetry(&resp, err) {
 			return
 		}
-
-		// need retry, attempt to retry
-		r.RetryAttempt++
-		if l := len(r.retryOption.RetryHooks); l > 0 {
-			for i := l - 1; i >= 0; i-- { // run retry hooks in reverse order
-				r.retryOption.RetryHooks[i](resp, err)
-			}
-		}
-		time.Sleep(r.retryOption.GetRetryInterval(resp, r.RetryAttempt))
-
-		// clean up before retry
-		if r.dumpBuffer != nil {
-			r.dumpBuffer.Reset()
-		}
-		if r.trace != nil {
-			r.trace = &clientTrace{}
-		}
-		resp.body = nil
-		resp.result = nil
-		resp.error = nil
 	}
 }
 
@@ -859,6 +898,23 @@ func (r *Request) MustHead(url string) *Response {
 // Head fires http request with HEAD method and the specified URL.
 func (r *Request) Head(url string) (*Response, error) {
 	return r.Send(http.MethodHead, url)
+}
+
+// MustQuery like Query, panic if error happens, should only be used
+// to test without error handling.
+func (r *Request) MustQuery(url string) *Response {
+	resp, err := r.Query(url)
+	if err != nil {
+		panic(err)
+	}
+	return resp
+}
+
+// Query fires http request with QUERY method and the specified URL. QUERY is a
+// safe, idempotent method that carries the query as request content, defined in
+// RFC 10008.
+func (r *Request) Query(url string) (*Response, error) {
+	return r.Send("QUERY", url)
 }
 
 // SetBody set the request Body, accepts string, []byte, io.Reader, map and struct.
@@ -1011,6 +1067,31 @@ func (r *Request) EnableAutoReadResponse() *Request {
 	return r
 }
 
+// SetMaxResponseSize sets the maximum allowed size of the response body in bytes
+// for this request, overriding Client.SetMaxResponseSize. A value of 0 or less
+// disables the limit for this request even if the client has a limit configured.
+//
+// See Client.SetMaxResponseSize for behavior details.
+func (r *Request) SetMaxResponseSize(max int64) *Request {
+	if max < 0 {
+		max = 0
+	}
+	r.maxResponseSize = &max
+	return r
+}
+
+// getMaxResponseSize returns the effective max response body size for this
+// request (request override, else client setting). 0 means no limit.
+func (r *Request) getMaxResponseSize() int64 {
+	if r.maxResponseSize != nil {
+		return *r.maxResponseSize
+	}
+	if r.client != nil {
+		return r.client.maxResponseSize
+	}
+	return 0
+}
+
 // DisableTrace disables trace.
 func (r *Request) DisableTrace() *Request {
 	r.trace = nil
@@ -1155,10 +1236,43 @@ func (r *Request) DisableForceMultipart() *Request {
 	return r
 }
 
-func (r *Request) getRetryOption() *retryOption {
+func (r *Request) getRetryOption() *RetryOption {
 	if r.retryOption == nil {
 		r.retryOption = newDefaultRetryOption()
 	}
+	return r.retryOption
+}
+
+// GetRetryOption returns the retry configuration of this request.
+// It returns nil if retry has not been configured (neither via
+// Client.SetCommonRetry* nor Request.SetRetry*).
+//
+// The returned value is the live option used by this request: mutations
+// affect subsequent retries on the same request. Treat it as read-only
+// unless you intentionally want to change retry behavior from middleware.
+//
+// This is useful in middleware to inspect MaxRetries together with
+// Request.RetryAttempt, e.g. to report errors only after the configured
+// retry budget is exhausted:
+//
+//	client.OnAfterResponse(func(c *req.Client, resp *req.Response) error {
+//	    ro := resp.Request.GetRetryOption()
+//	    if ro == nil {
+//	        return nil
+//	    }
+//	    // Cover HTTP error statuses and transport failures (resp.Err with
+//	    // no Response). Client OnAfterResponse still runs after failed Do.
+//	    failed := resp.IsErrorState() || resp.Err != nil
+//	    // RetryAttempt >= MaxRetries only detects budget exhaustion. Retries
+//	    // may also stop earlier when a RetryCondition returns false; in that
+//	    // case RetryAttempt can be less than MaxRetries on a terminal failure.
+//	    if failed && ro.MaxRetries >= 0 &&
+//	        resp.Request.RetryAttempt >= ro.MaxRetries {
+//	        // report once after final failure
+//	    }
+//	    return nil
+//	})
+func (r *Request) GetRetryOption() *RetryOption {
 	return r.retryOption
 }
 
