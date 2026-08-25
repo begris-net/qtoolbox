@@ -7,7 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
+	"os"
+	"path/filepath"
 	"time"
 
 	lzw "github.com/sshaman1101/dcompress"
@@ -126,6 +127,9 @@ func ExtractTarLzip(xFile *XFile) (size uint64, filesList []string, err error) {
 	return xFile.prog.Wrote, files, err
 }
 
+// errSkipEntry is returned for non-fatal archive members that should be ignored.
+var errSkipEntry = errors.New("skip archive entry")
+
 func (x *XFile) untar(reader io.Reader) ([]string, error) {
 	tarReader := tar.NewReader(reader)
 	files := []string{}
@@ -141,6 +145,10 @@ func (x *XFile) untar(reader io.Reader) ([]string, error) {
 		}
 
 		fSize, err := x.untarFile(header, tarReader)
+		if errors.Is(err, errSkipEntry) {
+			continue
+		}
+
 		if err != nil {
 			return files, err
 		}
@@ -170,12 +178,13 @@ func (x *XFile) untarFile(header *tar.Header, tarReader *tar.Reader) (uint64, er
 		file.Atime = time.Now()
 	}
 
-	if !strings.HasPrefix(file.Path, x.OutputDir) {
+	if !x.pathWithinOutput(file.Path) {
 		// The file being written is trying to write outside of our base path. Malicious archive?
 		return 0, fmt.Errorf("%s: %w: %s (from: %s)", x.FilePath, ErrInvalidPath, file.Path, header.Name)
 	}
 
-	if header.Typeflag == tar.TypeDir {
+	switch header.Typeflag {
+	case tar.TypeDir:
 		x.Debugf("Writing archived directory: %s", file.Path)
 
 		err := x.mkDir(file.Path, header.FileInfo().Mode(), header.ModTime)
@@ -184,9 +193,35 @@ func (x *XFile) untarFile(header *tar.Header, tarReader *tar.Reader) (uint64, er
 		}
 
 		return 0, nil
+	case tar.TypeSymlink, tar.TypeLink:
+		// Symlinks (and hard links) have no file payload; writing them as regular
+		// files produces empty stubs — see https://github.com/golift/xtractr/issues/153
+		return x.untarLink(header, file.Path)
 	}
 
 	x.Debugf("Writing archived file: %s (bytes: %d)", file.Path, header.FileInfo().Size())
 
 	return x.write(file)
+}
+
+// untarLink creates a symlink or hard link from a tar header.
+func (x *XFile) untarLink(header *tar.Header, path string) (uint64, error) {
+	err := x.mkDir(filepath.Dir(path), x.DirMode, header.ModTime)
+	if err != nil {
+		return 0, fmt.Errorf("making tar link parent dir: %w", err)
+	}
+
+	err = os.Remove(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return 0, fmt.Errorf("%s: removing existing path for link: %w: %s", x.FilePath, err, path)
+	}
+
+	switch header.Typeflag {
+	case tar.TypeSymlink:
+		return 0, x.createSymlink(path, header.Linkname)
+	case tar.TypeLink:
+		return 0, x.createHardLink(path, header.Linkname)
+	}
+
+	return 0, nil
 }

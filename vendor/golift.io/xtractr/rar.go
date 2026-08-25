@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
+	"os"
 	"strings"
 
 	"github.com/nwaples/rardecode/v2"
@@ -26,13 +26,12 @@ func ExtractRAR(xFile *XFile) (size uint64, filesList, archiveList []string, err
 	}
 
 	for idx, password := range passwords {
-		size, files, archives, err := extractRAR(&XFile{
-			FilePath:  xFile.FilePath,
-			OutputDir: xFile.OutputDir,
-			FileMode:  xFile.FileMode,
-			DirMode:   xFile.DirMode,
-			Password:  password,
-		})
+		// Copy the input so the retry keeps the logger, progress callbacks,
+		// SquashRoot and the rest of the caller-provided configuration.
+		attempt := *xFile
+		attempt.Password = password
+
+		size, files, archives, err := extractRAR(&attempt)
 		if err == nil {
 			return size, files, archives, nil
 		}
@@ -46,12 +45,10 @@ func ExtractRAR(xFile *XFile) (size uint64, filesList, archiveList []string, err
 	}
 
 	// No password worked, try without a password.
-	return extractRAR(&XFile{
-		FilePath:  xFile.FilePath,
-		OutputDir: xFile.OutputDir,
-		FileMode:  xFile.FileMode,
-		DirMode:   xFile.DirMode,
-	})
+	attempt := *xFile
+	attempt.Password = ""
+
+	return extractRAR(&attempt)
 }
 
 // extractRAR extracts a rar file. to a destination. This wraps github.com/nwaples/rardecode.
@@ -119,9 +116,17 @@ func (x *XFile) unrar(rarReader *rardecode.ReadCloser) ([]string, error) {
 			DirMode:  x.DirMode,
 			Mtime:    header.ModificationTime,
 			Atime:    header.AccessTime,
+			Linkname: header.Linkname,
 		}
-		//nolint:gocritic // this 1-argument filepath.Join removes a ./ prefix should there be one.
-		if !strings.HasPrefix(file.Path, filepath.Join(x.OutputDir)) {
+
+		// RAR5 stores symlink targets in a redirection record (not file payload).
+		// Ensure ModeSymlink is set when we have a unix/windows symlink redirection.
+		switch header.RedirType {
+		case rardecode.RedirUnixSymlink, rardecode.RedirWindowsSymlink, rardecode.RedirWindowsJunction:
+			file.FileMode |= os.ModeSymlink
+		}
+
+		if !x.pathWithinOutput(file.Path) {
 			// The file being written is trying to write outside of our base path. Malicious archive?
 			return files, fmt.Errorf("%s: %w: %s != %s (from: %s)",
 				x.FilePath, ErrInvalidPath, file.Path, x.OutputDir, header.Name)

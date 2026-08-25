@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"strings"
 
 	"golift.io/udf"
 )
@@ -92,8 +91,15 @@ func (x *XFile) unUDFEntry(udfImage *udf.Udf, entry *udf.File, parent string) (u
 
 func (x *XFile) unUDFDir(udfImage *udf.Udf, entry *udf.File, parent string) (uint64, []string, error) {
 	dirPath := filepath.Join(parent, entry.Name())
+	cleanPath := x.clean(dirPath)
 
-	err := x.mkDir(filepath.Join(x.OutputDir, dirPath), entry.Mode(), entry.ModTime())
+	if !x.pathWithinOutput(cleanPath) {
+		// The directory is trying to land outside of our base path. Malicious UDF image?
+		return 0, nil, fmt.Errorf("%s: %w: %s (from: %s)",
+			x.FilePath, ErrInvalidPath, cleanPath, entry.Name())
+	}
+
+	err := x.mkDir(cleanPath, entry.Mode(), entry.ModTime())
 	if err != nil {
 		return 0, nil, fmt.Errorf("making UDF directory %s: %w", entry.Name(), err)
 	}
@@ -122,8 +128,7 @@ func (x *XFile) unUDFFile(entry *udf.File, parent string) (uint64, []string, err
 		Mtime:    entry.ModTime(),
 	}
 
-	//nolint:gocritic
-	if !strings.HasPrefix(output.Path, filepath.Join(x.OutputDir)) {
+	if !x.pathWithinOutput(output.Path) {
 		return 0, nil, fmt.Errorf("%s: %w: %s != %s (from: %s)",
 			x.FilePath, ErrInvalidPath, output.Path, x.OutputDir, entry.Name())
 	}

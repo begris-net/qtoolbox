@@ -72,7 +72,7 @@ func (t cueTimestamp) toSamples(sampleRate uint32) uint64 {
 }
 
 // ExtractCUE extracts individual tracks from a FLAC file referenced by a CUE sheet.
-// The xFile.FilePath should point to the .cue file.
+// The xFile.FilePath should point to the .cue file (or .cue.txt).
 func ExtractCUE(xFile *XFile) (size uint64, files, archives []string, err error) {
 	cue, timestamps, err := parseCueSheetFile(xFile.FilePath)
 	if err != nil {
@@ -106,8 +106,14 @@ func ExtractCUE(xFile *XFile) (size uint64, files, archives []string, err error)
 
 	// Write the CUE sheet into the output directory so the folder is self-contained
 	// (tracks, art, and the exact split definition for archival and re-rip verification).
+	// filepath.Base strips any directory components, and the join is verified to
+	// stay inside the output folder.
 	cueBase := filepath.Base(xFile.FilePath)
 	cueDest := filepath.Join(xFile.OutputDir, cueBase)
+
+	if !xFile.pathWithinOutput(cueDest) {
+		return 0, nil, nil, fmt.Errorf("%s: %w: %s", xFile.FilePath, ErrInvalidPath, cueDest)
+	}
 
 	writeErr := copyCueToOutput(xFile.FilePath, cueDest, xFile.FileMode)
 	if writeErr != nil {
@@ -307,6 +313,12 @@ func parseCueSheet(reader io.Reader) (*CueSheet, []cueTimestamp, error) { //noli
 func resolveCueAudioPath(cueDir, cueFile, cueFilePath string) (string, error) {
 	path := filepath.Join(cueDir, cueFile)
 
+	// A CUE sheet must not reference audio outside its own folder; a crafted
+	// FILE entry like "../../secret.flac" would read and copy that file.
+	if !pathWithin(cueDir, path) {
+		return "", fmt.Errorf("%w: %s", ErrInvalidPath, cueFile)
+	}
+
 	_, err := os.Stat(path)
 	if err == nil {
 		return path, nil
@@ -330,7 +342,7 @@ func resolveCueAudioPath(cueDir, cueFile, cueFilePath string) (string, error) {
 	}
 
 	// Fallback: try audio files with the same base name as the CUE file (handles O vs Ö, encoding mismatches).
-	baseNoExt := strings.TrimSuffix(filepath.Base(cueFilePath), filepath.Ext(cueFilePath))
+	baseNoExt := cueBaseName(cueFilePath)
 
 	for _, fallbackExt := range []string{".flac", ".ape"} {
 		fallbackPath := filepath.Join(cueDir, baseNoExt+fallbackExt)
@@ -342,6 +354,21 @@ func resolveCueAudioPath(cueDir, cueFile, cueFilePath string) (string, error) {
 	}
 
 	return "", fmt.Errorf("%w: %s", ErrAudioNotFound, path)
+}
+
+// cueBaseName returns the CUE sheet filename without its sheet suffix.
+// Release groups sometimes ship the sheet as .cue.txt; filepath.Ext would only
+// strip .txt and leave a ".cue" stem that does not match album.flac.
+func cueBaseName(path string) string {
+	base := filepath.Base(path)
+	lower := strings.ToLower(base)
+
+	const cueTxtSuffix = ".cue.txt"
+	if strings.HasSuffix(lower, cueTxtSuffix) {
+		return base[:len(base)-len(cueTxtSuffix)]
+	}
+
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 // splitCueLine splits a CUE line into its command and arguments.
@@ -975,7 +1002,7 @@ func writePicturesToFiles(outputDir string, pictures []*meta.Picture, fileMode o
 		name += "." + ext
 		path := filepath.Join(outputDir, name)
 
-		err := os.WriteFile(path, pic.Data, fileMode)
+		err := writeExtractFile(path, pic.Data, fileMode)
 		if err != nil {
 			return paths, totalBytes, fmt.Errorf("writing %s: %w", name, err)
 		}
@@ -995,7 +1022,7 @@ func copyCueToOutput(srcPath, destPath string, fileMode os.FileMode) error {
 		return fmt.Errorf("reading cue sheet: %w", err)
 	}
 
-	err = os.WriteFile(destPath, data, fileMode) //nolint:gosec // ffs.
+	err = writeExtractFile(destPath, data, fileMode)
 	if err != nil {
 		return fmt.Errorf("writing cue sheet: %w", err)
 	}

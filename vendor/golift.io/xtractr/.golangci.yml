@@ -5,6 +5,7 @@ linters:
     # unused
     - nlreturn
     - exhaustruct
+    - exhaustruct_v5
     - depguard
     - nonamedreturns
     - forbidigo
@@ -27,6 +28,10 @@ linters:
         path: chardet\.go
 
   settings:
+    gomoddirectives:
+      # Temporary until nwaples/rardecode#62 (RAR5 Linkname) merges.
+      replace-allow-list:
+        - github.com/nwaples/rardecode/v2
     gosec:
       excludes:
         - G304

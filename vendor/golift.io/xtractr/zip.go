@@ -4,8 +4,6 @@ import (
 	"archive/zip"
 	"fmt"
 	"path/filepath"
-	"strings"
-	"sync"
 	"time"
 )
 
@@ -76,7 +74,7 @@ func (x *XFile) extractZIPParallel(
 		return x.prog.Wrote, files, err
 	}
 
-	workerErr := x.zipDispatchWorkers(fileEntries)
+	workerErr := dispatchWorkers(x.FileWorkers, fileEntries, x.extractZIPEntry)
 	if workerErr != nil {
 		return x.prog.Wrote, files, workerErr
 	}
@@ -99,7 +97,7 @@ func (x *XFile) zipPrepareEntries(
 		decodedName := decodeZipFilename(zipFile.Name, zipFile.Extra, zipFile.NonUTF8, decoder)
 		cleanPath := x.clean(decodedName)
 
-		if !strings.HasPrefix(cleanPath, x.OutputDir) {
+		if !x.pathWithinOutput(cleanPath) {
 			return nil, files, fmt.Errorf("%s: %s: %w: %s (from: %s)",
 				x.FilePath, zipFile.FileInfo().Name(), ErrInvalidPath, cleanPath, decodedName)
 		}
@@ -119,39 +117,6 @@ func (x *XFile) zipPrepareEntries(
 	}
 
 	return entries, files, nil
-}
-
-// zipDispatchWorkers sends file entries to a bounded worker pool for extraction.
-func (x *XFile) zipDispatchWorkers(entries []zipFileEntry) error {
-	var (
-		waitGroup sync.WaitGroup
-		firstErr  error
-		errOnce   sync.Once
-		semaphore = make(chan struct{}, x.FileWorkers)
-	)
-
-	for idx := range entries {
-		entry := entries[idx]
-
-		if firstErr != nil {
-			break
-		}
-
-		semaphore <- struct{}{} // acquire worker slot
-
-		waitGroup.Go(func() {
-			defer func() { <-semaphore }() // release worker slot
-
-			err := x.extractZIPEntry(entry)
-			if err != nil {
-				errOnce.Do(func() { firstErr = err })
-			}
-		})
-	}
-
-	waitGroup.Wait()
-
-	return firstErr
 }
 
 // extractZIPEntry extracts a single zip file entry (used by parallel workers).
@@ -196,7 +161,7 @@ func (x *XFile) unzipWithName(zipFile *zip.File, name string) (uint64, string, e
 		Atime:    time.Now(),
 	}
 
-	if !strings.HasPrefix(file.Path, x.OutputDir) {
+	if !x.pathWithinOutput(file.Path) {
 		// The file being written is trying to write outside of our base path. Malicious archive?
 		err := fmt.Errorf("%s: %w: %s (from: %s)", zipFile.FileInfo().Name(), ErrInvalidPath, file.Path, name)
 		return 0, file.Path, err
