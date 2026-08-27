@@ -21,7 +21,7 @@ github.com/Unpackerr/iso9660
 ## explicit; go 1.21
 github.com/YoshikiShibata/gostream
 github.com/YoshikiShibata/gostream/function
-# github.com/andybalholm/brotli v1.2.1
+# github.com/andybalholm/brotli v1.2.2
 ## explicit; go 1.22
 github.com/andybalholm/brotli
 github.com/andybalholm/brotli/flate
@@ -29,7 +29,7 @@ github.com/andybalholm/brotli/matchfinder
 # github.com/bodgit/plumbing v1.3.0
 ## explicit; go 1.13
 github.com/bodgit/plumbing
-# github.com/bodgit/sevenzip v1.6.4
+# github.com/bodgit/sevenzip v1.6.5
 ## explicit; go 1.25.0
 github.com/bodgit/sevenzip
 github.com/bodgit/sevenzip/internal/aes7z
@@ -126,7 +126,7 @@ github.com/inconshreveable/mousetrap
 # github.com/juju/errors v1.0.0
 ## explicit; go 1.18
 github.com/juju/errors
-# github.com/klauspost/compress v1.18.6
+# github.com/klauspost/compress v1.19.2
 ## explicit; go 1.24
 github.com/klauspost/compress
 github.com/klauspost/compress/flate
@@ -152,7 +152,7 @@ github.com/mariomac/gostream/stream
 # github.com/mattn/go-runewidth v0.0.20
 ## explicit; go 1.20
 github.com/mattn/go-runewidth
-# github.com/mewkiz/flac v1.0.13
+# github.com/mewkiz/flac v1.0.14
 ## explicit; go 1.23.2
 github.com/mewkiz/flac
 github.com/mewkiz/flac/frame
@@ -164,7 +164,7 @@ github.com/mewkiz/flac/internal/hashutil/crc8
 github.com/mewkiz/flac/internal/ioutilx
 github.com/mewkiz/flac/internal/utf8
 github.com/mewkiz/flac/meta
-# github.com/mewkiz/pkg v0.0.0-20260331151047-10214ccde7de
+# github.com/mewkiz/pkg v0.0.0-20260703220044-4fb89b18cc87
 ## explicit; go 1.25.0
 github.com/mewkiz/pkg/errutil
 # github.com/mewpkg/term v0.0.0-20241026122259-37a80af23985
@@ -173,13 +173,13 @@ github.com/mewpkg/term
 # github.com/mitchellh/go-homedir v1.1.0
 ## explicit
 github.com/mitchellh/go-homedir
-# github.com/nwaples/rardecode/v2 v2.2.5
+# github.com/nwaples/rardecode/v2 v2.4.1
 ## explicit; go 1.21
 github.com/nwaples/rardecode/v2
 # github.com/peterebden/ar v0.0.0-20241106141004-20dc11b778e8
 ## explicit; go 1.19
 github.com/peterebden/ar
-# github.com/pierrec/lz4/v4 v4.1.27
+# github.com/pierrec/lz4/v4 v4.1.29
 ## explicit; go 1.17
 github.com/pierrec/lz4/v4
 github.com/pierrec/lz4/v4/internal/lz4block
@@ -250,8 +250,8 @@ github.com/stangelandcl/ppmd/internal/h7z
 # github.com/therootcompany/xz v1.0.1
 ## explicit; go 1.15
 github.com/therootcompany/xz
-# github.com/ulikunitz/xz v0.5.15
-## explicit; go 1.12
+# github.com/ulikunitz/xz v0.5.16
+## explicit; go 1.20
 github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash
 github.com/ulikunitz/xz/internal/xlog
@@ -262,7 +262,7 @@ github.com/xo/terminfo
 # go4.org v0.0.0-20260112195520-a5071408f32f
 ## explicit; go 1.24.0
 go4.org/readerutil
-# golang.org/x/crypto v0.53.0
+# golang.org/x/crypto v0.55.0
 ## explicit; go 1.25.0
 golang.org/x/crypto/cast5
 golang.org/x/crypto/chacha20
@@ -282,7 +282,7 @@ golang.org/x/crypto/sha3
 # golang.org/x/exp v0.0.0-20250811191247-51f88131bc50
 ## explicit; go 1.23.0
 golang.org/x/exp/constraints
-# golang.org/x/net v0.55.0
+# golang.org/x/net v0.57.0
 ## explicit; go 1.25.0
 golang.org/x/net/bpf
 golang.org/x/net/html
@@ -296,16 +296,16 @@ golang.org/x/net/internal/socket
 golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/publicsuffix
-# golang.org/x/sys v0.46.0
+# golang.org/x/sys v0.47.0
 ## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/term v0.44.0
+# golang.org/x/term v0.45.0
 ## explicit; go 1.25.0
 golang.org/x/term
-# golang.org/x/text v0.38.0
+# golang.org/x/text v0.41.0
 ## explicit; go 1.25.0
 golang.org/x/text/cases
 golang.org/x/text/encoding
@@ -333,7 +333,7 @@ golang.org/x/text/unicode/norm
 # golift.io/udf v0.0.1
 ## explicit; go 1.25.6
 golift.io/udf
-# golift.io/xtractr v0.4.0
+# golift.io/xtractr v0.4.2
 ## explicit; go 1.25.7
 golift.io/xtractr
 # gopkg.in/yaml.v3 v3.0.1
