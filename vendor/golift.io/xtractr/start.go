@@ -38,8 +38,19 @@ type Config struct {
 	// a suffix is added instead. ie. .1, .2, .3, etc.
 	// Default is false because a misconfiguration may fill your disk.
 	TryNames bool
-	// The suffix used for temporary folders.
+	// The suffix used for temporary folders and to brand cross-device copy
+	// siblings as a known extra extension (e.g. movie.mkv.xtractr_partial).
+	// Empty uses DefaultSuffix.
 	Suffix string
+	// MaxBytes is the default maximum uncompressed bytes written per archive.
+	// 0 means unlimited. Copied onto each XFile when Xtract.MaxBytes is 0.
+	MaxBytes uint64
+	// MaxFiles is the default maximum files, directories, and symlinks created
+	// per archive. 0 means unlimited. Copied onto each XFile when Xtract.MaxFiles is 0.
+	MaxFiles int
+	// MaxRatio is the default maximum bytesWritten / archiveFileSize per archive.
+	// 0 means unlimited. Copied onto each XFile when Xtract.MaxRatio is 0.
+	MaxRatio float64
 }
 
 // Logger allows this library to write logs.

@@ -52,6 +52,15 @@ type Xtract struct {
 	// Contains info about the progress of the extraction.
 	// Shared by all archive file extractions that occur with this Xtract.
 	Updates chan Progress
+	// MaxBytes is the maximum uncompressed bytes written per archive.
+	// 0 means unlimited; when 0, Config.MaxBytes is used.
+	MaxBytes uint64
+	// MaxFiles is the maximum files, directories, and symlinks created per archive.
+	// 0 means unlimited; when 0, Config.MaxFiles is used.
+	MaxFiles int
+	// MaxRatio is the maximum bytesWritten / archiveFileSize per archive.
+	// 0 means unlimited; when 0, Config.MaxRatio is used.
+	MaxRatio float64
 }
 
 // Response is sent to the call-back function. The first CBFunction call is just
@@ -77,6 +86,13 @@ type Response struct {
 	Archives ArchiveList
 	// Files written to final path.
 	NewFiles []string
+	// Refused lists files that were extracted but not moved into the final
+	// path because the destination was already occupied. The occupying file
+	// may have arrived with the download; it was kept. A refusal alone does
+	// not set an error. The same logical file can appear twice (with different
+	// Src paths) if it is refused during the squash move and again during the
+	// final folder move; consumers should dedupe by Dest.
+	Refused []RefusedFile
 	// SkipOnRecursion lists paths that extractors copied into output (e.g. CUE sheet)
 	// and must not be re-extracted when recursing. Other files (e.g. CUE from a RAR) are still extracted.
 	SkipOnRecursion []string
@@ -188,6 +204,9 @@ func (x *Xtractr) decompressFolders(resp *Response) error {
 				LogFile:          resp.X.LogFile,
 				Updates:          resp.X.Updates,
 				Progress:         resp.X.Progress,
+				MaxBytes:         resp.X.MaxBytes,
+				MaxFiles:         resp.X.MaxFiles,
+				MaxRatio:         resp.X.MaxRatio,
 			},
 			Started:  resp.Started,
 			Output:   output,
@@ -196,6 +215,7 @@ func (x *Xtractr) decompressFolders(resp *Response) error {
 
 		err := x.decompressFiles(subResp)
 		resp.NewFiles = append(resp.NewFiles, subResp.NewFiles...)
+		resp.Refused = append(resp.Refused, subResp.Refused...)
 		resp.Size += subResp.Size
 
 		if err != nil {
@@ -321,6 +341,9 @@ func (x *Xtractr) decompressFiles(resp *Response) error {
 			Passwords: resp.X.Passwords,
 			Progress:  resp.X.Progress,
 			Updates:   resp.X.Updates,
+			MaxBytes:  resp.X.MaxBytes,
+			MaxFiles:  resp.X.MaxFiles,
+			MaxRatio:  resp.X.MaxRatio,
 		},
 		Started:  resp.Started,
 		Output:   resp.Output,
@@ -330,6 +353,7 @@ func (x *Xtractr) decompressFiles(resp *Response) error {
 	// Combine the new Response with the existing response.
 	resp.Extras = nre.Archives
 	resp.Size += nre.Size
+	resp.Refused = append(resp.Refused, nre.Refused...)
 
 	if nre.NewFiles != nil {
 		resp.NewFiles = append(resp.NewFiles, nre.NewFiles...)
@@ -386,25 +410,42 @@ func (x *Xtractr) processArchive(filename string, resp *Response) (uint64, []str
 		OutputDir:   resp.Output,
 		FileMode:    x.config.FileMode,
 		DirMode:     x.config.DirMode,
+		Suffix:      x.config.Suffix,
 		Passwords:   resp.X.Passwords,
 		Password:    resp.X.Password,
 		FileWorkers: x.config.FileWorkers,
+		MaxBytes:    pick(resp.X.MaxBytes, x.config.MaxBytes),
+		MaxFiles:    pick(resp.X.MaxFiles, x.config.MaxFiles),
+		MaxRatio:    pick(resp.X.MaxRatio, x.config.MaxRatio),
 		log:         x.config.Logger,
 		Updates:     resp.X.Updates,
 		Progress:    resp.X.Progress,
 	}
 
 	bytes, files, archives, err := ExtractFile(xFile)
-	if err != nil {
-		x.DeleteFiles(resp.Output) // clean up the mess after an error and bail.
-		return bytes, files, archives, WrapExtractError(err, xFile, bytes, "")
-	}
 
 	if len(xFile.SkipOnRecursion) > 0 {
 		resp.SkipOnRecursion = append(resp.SkipOnRecursion, xFile.SkipOnRecursion...)
 	}
 
+	// Collect refusals before the error check so a failed extract still reports them.
+	resp.Refused = append(resp.Refused, xFile.refused...)
+
+	if err != nil {
+		x.DeleteFiles(resp.Output) // clean up the mess after an error and bail.
+		return bytes, files, archives, WrapExtractError(err, xFile, bytes, "")
+	}
+
 	return bytes, files, archives, nil
+}
+
+func pick[T uint64 | int | float64](job, cfg T) T { //nolint:ireturn // numeric union, not an interface.
+	var zero T
+	if job != zero {
+		return job
+	}
+
+	return cfg
 }
 
 func (x *Xtractr) cleanupProcessedArchives(resp *Response) error {
@@ -422,7 +463,11 @@ func (x *Xtractr) cleanupProcessedArchives(resp *Response) error {
 	if !resp.X.TempFolder {
 		time.Sleep(fsSyncDelay) // Wait for file system to catch up/sync.
 		// If TempFolder is false then move the files back to the original location.
-		resp.NewFiles, err = x.MoveFiles(resp.Output, resp.X.Path, false)
+		var renamed Renamed
+
+		renamed, err = x.RenameFiles(resp.Output, resp.X.Path, false)
+		resp.NewFiles = renamed.NewFiles
+		resp.Refused = append(resp.Refused, renamed.Refused...)
 	}
 
 	if err != nil {
@@ -515,13 +560,15 @@ func (x *Xtractr) cleanTempFolder(resp *Response) {
 		return
 	}
 
-	newFiles, err := x.MoveFiles(resp.Output, newName, false)
+	renamed, err := x.RenameFiles(resp.Output, newName, false)
+	resp.Refused = append(resp.Refused, renamed.Refused...)
+
 	if err != nil {
 		x.config.Printf("Error: Renaming Temporary Folder: %v", err)
 	} else {
 		x.config.Debugf("Renamed Temp Folder: %v -> %v", resp.Output, newName)
 		resp.Output = newName
-		resp.NewFiles = newFiles
+		resp.NewFiles = renamed.NewFiles
 	}
 
 	files, err := x.GetFileList(resp.X.Path)
