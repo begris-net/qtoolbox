@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/peterebden/ar"
 )
@@ -14,10 +13,15 @@ import (
 func ExtractAr(xFile *XFile) (size uint64, filesList []string, err error) {
 	arFile, err := os.Open(xFile.FilePath)
 	if err != nil {
-		return 0, nil, fmt.Errorf("rardecode.OpenReader: %w", err)
+		return 0, nil, fmt.Errorf("os.Open: %w", err)
 	}
 
-	defer xFile.newProgress(getUncompressedArSize(arFile)).done() // this closes arFile
+	tracker, headerErr := xFile.archiveProgress(getUncompressedArSize(arFile))
+	defer tracker.done() // getUncompressedArSize closed arFile
+
+	if headerErr != nil {
+		return 0, nil, headerErr
+	}
 
 	arFile, err = os.Open(xFile.FilePath)
 	if err != nil {
@@ -53,7 +57,7 @@ func (x *XFile) unAr(reader io.Reader) ([]string, error) {
 			Mtime:    header.ModTime,
 		}
 
-		if !strings.HasPrefix(file.Path, x.OutputDir) {
+		if !x.pathWithinOutput(file.Path) {
 			// The file being written is trying to write outside of our base path. Malicious archive?
 			return files, fmt.Errorf("%s: %w: %s (from: %s)", x.FilePath, ErrInvalidPath, file.Path, header.Name)
 		}
@@ -74,7 +78,7 @@ func (x *XFile) unAr(reader io.Reader) ([]string, error) {
 }
 
 // ar files are not compressed.
-func getUncompressedArSize(arFile io.ReadCloser) (total, compressed uint64, count int) {
+func getUncompressedArSize(arFile *os.File) (total, compressed uint64, count int) {
 	defer arFile.Close()
 
 	arReader := ar.NewReader(arFile)
