@@ -25,6 +25,7 @@ type genericStream[T any] struct {
 	parallelCount int
 	ordered       bool
 
+	closeCount         int
 	terminalCloseCount int
 
 	prevReq  chan struct{}
@@ -44,6 +45,7 @@ func newGenericStream[T any](gs *genericStream[T]) *genericStream[T] {
 		parallel:      gs.parallel,
 		parallelCount: gs.parallelCount,
 
+		closeCount:         gs.parallelCount,
 		terminalCloseCount: gs.terminalCloseCount,
 
 		prevReq:  gs.nextReq,
@@ -79,8 +81,8 @@ func (gs *genericStream[T]) close() {
 		return
 	}
 
-	gs.parallelCount--
-	if gs.parallelCount > 0 {
+	gs.closeCount--
+	if gs.closeCount > 0 {
 		return
 	}
 
@@ -153,7 +155,7 @@ func (gs *genericStream[T]) terminalOpMatch(match func(t T) bool) {
 	gs.terminalClose()
 }
 
-func (gs *genericStream[T]) Parallel() Stream[T] {
+func (gs *genericStream[T]) Parallel() streamImpl[T] {
 	gs.validateState()
 
 	if gs.parallel {
@@ -164,8 +166,8 @@ func (gs *genericStream[T]) Parallel() Stream[T] {
 	newGS.parallel = true
 	newGS.parallelCount = goMaxProcs
 	newGS.terminalCloseCount = goMaxProcs
-	newGS.nextReq = make(chan struct{}, gs.parallelCount)
-	newGS.nextData = make(chan orderedData[T], gs.parallelCount)
+	newGS.nextReq = make(chan struct{}, goMaxProcs)
+	newGS.nextData = make(chan orderedData[T], goMaxProcs*2)
 
 	parallelCount := newGS.parallelCount
 	for i := 0; i < parallelCount; i++ {
@@ -173,6 +175,30 @@ func (gs *genericStream[T]) Parallel() Stream[T] {
 	}
 
 	return newGS
+}
+
+func (gs *genericStream[T]) Sequential() streamImpl[T] {
+	gs.validateState()
+
+	if !gs.parallel {
+		return gs
+	}
+
+	newGS := newGenericStream(gs)
+	newGS.parallel = false
+	newGS.parallelCount = 1
+	newGS.closeCount = 1
+	newGS.terminalCloseCount = 1
+	newGS.nextReq = make(chan struct{}, 1)
+	newGS.nextData = make(chan orderedData[T], 2)
+
+	go newGS.drain()
+
+	return newGS
+}
+
+func (gs *genericStream[T]) IsParallel() bool {
+	return gs.parallel
 }
 
 func (gs *genericStream[T]) drain() {
@@ -187,7 +213,7 @@ func (gs *genericStream[T]) drain() {
 	gs.close()
 }
 
-func (gs *genericStream[T]) Filter(predicate function.Predicate[T]) Stream[T] {
+func (gs *genericStream[T]) Filter(predicate function.Predicate[T]) streamImpl[T] {
 	gs.validateState()
 
 	newGS := newGenericStream(gs)
@@ -247,7 +273,7 @@ func (gs *genericStream[T]) ForEach(action function.Consumer[T]) {
 	wg.Wait()
 }
 
-func (gs *genericStream[T]) Sorted(cmp func(a, b T) int) Stream[T] {
+func (gs *genericStream[T]) Sorted(cmp func(a, b T) int) streamImpl[T] {
 	gs.validateState()
 
 	var dataSlice []T
@@ -279,10 +305,10 @@ func (gs *genericStream[T]) Sorted(cmp func(a, b T) int) Stream[T] {
 	}
 
 	slices.SortFunc(dataSlice, cmp)
-	return Of(dataSlice...)
+	return newSeqStream(dataSlice...)
 }
 
-func (gs *genericStream[T]) Peek(action function.Consumer[T]) Stream[T] {
+func (gs *genericStream[T]) Peek(action function.Consumer[T]) streamImpl[T] {
 	gs.validateState()
 
 	newGS := newGenericStream(gs)
@@ -308,7 +334,7 @@ func (gs *genericStream[T]) peek(action function.Consumer[T]) {
 	gs.close()
 }
 
-func (gs *genericStream[T]) Limit(maxSize int) Stream[T] {
+func (gs *genericStream[T]) Limit(maxSize int) streamImpl[T] {
 	gs.validateState()
 
 	if gs.ordered && gs.parallelCount > 1 {
@@ -320,6 +346,7 @@ func (gs *genericStream[T]) Limit(maxSize int) Stream[T] {
 	// we don't process elements in parallel to limit the
 	// number of elements.
 	newGS.parallelCount = 1
+	newGS.closeCount = 1
 	go newGS.limit(maxSize)
 	return newGS
 }
@@ -350,7 +377,7 @@ func (gs *genericStream[T]) limit(maxSize int) {
 	gs.close()
 }
 
-func (gs *genericStream[T]) Skip(n int) Stream[T] {
+func (gs *genericStream[T]) Skip(n int) streamImpl[T] {
 	gs.validateState()
 
 	if gs.ordered && gs.parallelCount > 1 {
@@ -362,6 +389,7 @@ func (gs *genericStream[T]) Skip(n int) Stream[T] {
 	// we don't process elements in parallel to limit the
 	// number of elements.
 	newGS.parallelCount = 1
+	newGS.closeCount = 1
 
 	go newGS.skip(n)
 	return newGS
@@ -387,6 +415,78 @@ func (gs *genericStream[T]) skip(n int) {
 		gs.nextData <- data
 	}
 
+	gs.close()
+}
+
+func (gs *genericStream[T]) TakeWhile(predicate function.Predicate[T]) streamImpl[T] {
+	gs.validateState()
+
+	if gs.ordered && gs.parallelCount > 1 {
+		panic("TakeWhile doesn't support ordered parallel stream")
+	}
+
+	newGS := newGenericStream(gs)
+
+	// TakeWhile must be evaluated sequentially so that termination
+	// respects encounter order.
+	newGS.parallelCount = 1
+	newGS.closeCount = 1
+
+	go newGS.takeWhile(predicate)
+	return newGS
+}
+
+func (gs *genericStream[T]) takeWhile(predicate function.Predicate[T]) {
+	for gs.getNextReq() {
+		data, ok := gs.getPrevData()
+		if !ok {
+			gs.close()
+			return
+		}
+		if !predicate(data.data) {
+			gs.close()
+			return
+		}
+		gs.nextData <- data
+	}
+	gs.close()
+}
+
+func (gs *genericStream[T]) DropWhile(predicate function.Predicate[T]) streamImpl[T] {
+	gs.validateState()
+
+	if gs.ordered && gs.parallelCount > 1 {
+		panic("DropWhile doesn't support ordered parallel stream")
+	}
+
+	newGS := newGenericStream(gs)
+
+	// DropWhile must be evaluated sequentially so that the boundary
+	// between dropped and retained elements respects encounter order.
+	newGS.parallelCount = 1
+	newGS.closeCount = 1
+
+	go newGS.dropWhile(predicate)
+	return newGS
+}
+
+func (gs *genericStream[T]) dropWhile(predicate function.Predicate[T]) {
+	dropping := true
+	for gs.getNextReq() {
+		for {
+			data, ok := gs.getPrevData()
+			if !ok {
+				gs.close()
+				return
+			}
+			if dropping && predicate(data.data) {
+				continue
+			}
+			dropping = false
+			gs.nextData <- data
+			break
+		}
+	}
 	gs.close()
 }
 

@@ -1,10 +1,10 @@
 module github.com/begris-net/qtoolbox
 
-go 1.25.7
+go 1.27
 
 require (
 	github.com/BooleanCat/go-functional v1.1.0
-	github.com/YoshikiShibata/gostream v0.0.0-20231110221303-1f6d7dc07388
+	github.com/YoshikiShibata/gostream v0.1.0
 	github.com/codeclysm/extract/v4 v4.0.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/google/go-github/v57 v57.0.0
