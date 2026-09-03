@@ -158,6 +158,7 @@ func readAPESeekTable(file *os.File, info *apeInfo, junk int64) error {
 	if info.Header.TotalFrames > uint32(maxInt) {
 		return fmt.Errorf("%w: %d frames exceeds platform limits", ErrAPESeekTable, info.Header.TotalFrames)
 	}
+
 	numEntries := int(info.Header.TotalFrames)
 
 	declaredEntries := int64(info.Descriptor.SeekTableBytes) / bytesPerUint32
@@ -280,7 +281,7 @@ func id3v2TagSize(hdr []byte) int64 {
 func apeSkipNullPadding(file *os.File, junk int64) int64 {
 	var b [1]byte
 
-	for scanned := 0; scanned < apeMaxMagicScan; scanned++ {
+	for range apeMaxMagicScan {
 		n, err := file.Read(b[:])
 		if err != nil || n == 0 || b[0] != 0 {
 			return junk
@@ -480,8 +481,6 @@ func splitAPE(
 		return 0, nil, fmt.Errorf("creating output directory: %w", err)
 	}
 
-	defer xFile.newProgress(0, 0, len(cue.Tracks)).done()
-
 	srcFile, err := os.Open(audioPath)
 	if err != nil {
 		return 0, nil, fmt.Errorf("opening ape file for splitting: %w", err)
@@ -500,15 +499,15 @@ func splitAPE(
 		outputName := formatTrackFilename(track, ".ape")
 		outputPath := filepath.Join(xFile.OutputDir, outputName)
 
-		size, writeErr := writeTrackAPE(outputPath, info, srcFile, fr.start, fr.end, xFile.FileMode)
+		size, usedPath, writeErr := writeTrackAPE(xFile, outputPath, info, srcFile, fr.start, fr.end, xFile.FileMode)
 		if writeErr != nil {
 			return totalSize, files, fmt.Errorf("writing ape track %d: %w", track.Number, writeErr)
 		}
 
 		totalSize += size
 
-		files = append(files, outputPath)
-		xFile.Debugf("Wrote APE track %d: %s (%d bytes)", track.Number, outputPath, size)
+		files = append(files, usedPath)
+		xFile.Debugf("Wrote APE track %d: %s (%d bytes)", track.Number, usedPath, size)
 	}
 
 	return totalSize, files, nil
@@ -518,18 +517,27 @@ func splitAPE(
 // from the source file. Compressed frame data is copied verbatim. On error the partial
 // output file is removed so a failed split never leaves a half-written track behind.
 func writeTrackAPE(
+	xFile *XFile,
 	outputPath string,
 	info *apeInfo,
 	srcFile *os.File,
 	startFrame, endFrame int,
 	fileMode os.FileMode,
-) (uint64, error) {
-	outFile, err := os.OpenFile(outputPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, fileMode)
+) (uint64, string, error) {
+	outFile, usedPath, err := openExtractFile(outputPath, fileMode)
 	if err != nil {
-		return 0, fmt.Errorf("creating output ape file: %w", err)
+		return 0, "", fmt.Errorf("creating output ape file: %w", err)
 	}
 
-	size, err := writeTrackAPEContents(outFile, info, srcFile, startFrame, endFrame)
+	counted, err := xFile.extractWriter(outFile)
+	if err != nil {
+		_ = outFile.Close()
+		_ = os.Remove(usedPath)
+
+		return 0, usedPath, err
+	}
+
+	size, err := writeTrackAPEContents(outFile, counted, info, srcFile, startFrame, endFrame)
 
 	closeErr := outFile.Close()
 	if err == nil && closeErr != nil {
@@ -537,11 +545,11 @@ func writeTrackAPE(
 	}
 
 	if err != nil {
-		_ = os.Remove(outputPath)
-		return 0, err
+		_ = os.Remove(usedPath)
+		return 0, usedPath, err
 	}
 
-	return size, nil
+	return size, usedPath, nil
 }
 
 // apeTrackContainer holds the serialized, ready-to-write container pieces for one split
@@ -632,6 +640,7 @@ func buildAPETrackContainer(info *apeInfo, startFrame, endFrame int) (*apeTrackC
 // is computed and patched into the descriptor so the output passes full MAC verification.
 func writeTrackAPEContents(
 	outFile *os.File,
+	counted io.Writer,
 	info *apeInfo,
 	srcFile *os.File,
 	startFrame, endFrame int,
@@ -641,24 +650,24 @@ func writeTrackAPEContents(
 		return 0, err
 	}
 
-	err = binary.Write(outFile, binary.LittleEndian, &con.descriptor)
+	err = binary.Write(counted, binary.LittleEndian, &con.descriptor)
 	if err != nil {
 		return 0, fmt.Errorf("writing ape descriptor: %w", err)
 	}
 
-	_, err = outFile.Write(con.headerBytes)
+	_, err = counted.Write(con.headerBytes)
 	if err != nil {
 		return 0, fmt.Errorf("writing ape header: %w", err)
 	}
 
-	_, err = outFile.Write(con.seekTableBytes)
+	_, err = counted.Write(con.seekTableBytes)
 	if err != nil {
 		return 0, fmt.Errorf("writing ape seek table: %w", err)
 	}
 
 	// Tee the frame data into the MD5 as it's written so we never buffer a whole track.
 	hash := md5.New() //nolint:gosec // MD5 is the APE file integrity hash, not security.
-	dst := io.MultiWriter(outFile, hash)
+	dst := io.MultiWriter(counted, hash)
 
 	err = writeAPEFrameData(dst, srcFile, info, startFrame, endFrame, con.trackDataSize)
 	if err != nil {

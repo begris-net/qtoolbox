@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/cavaliergopher/cpio"
 )
@@ -26,9 +24,9 @@ func ExtractCPIOGzip(xFile *XFile) (size uint64, filesList []string, err error) 
 	if err != nil {
 		return 0, nil, fmt.Errorf("gzip.NewReader: %w", err)
 	}
-	defer zipStream.Close()
 
 	files, err := xFile.uncpio(zipStream)
+	closeNamed(zipStream, &err)
 
 	return xFile.prog.Wrote, files, err
 }
@@ -80,7 +78,7 @@ func (x *XFile) uncpioFile(cpioFile *cpio.Header, cpioReader *cpio.Reader) (uint
 		Mtime:    cpioFile.ModTime,
 	}
 
-	if !strings.HasPrefix(file.Path, x.OutputDir) {
+	if !x.pathWithinOutput(file.Path) {
 		// The file being written is trying to write outside of the base path. Malicious archive?
 		return 0, fmt.Errorf("%s: %w: %s (from: %s)", cpioFile.FileInfo().Name(), ErrInvalidPath, file.Path, cpioFile.Name)
 	}
@@ -96,9 +94,15 @@ func (x *XFile) uncpioFile(cpioFile *cpio.Header, cpioReader *cpio.Reader) (uint
 
 	// This turns hard links into symlinks.
 	if cpioFile.Linkname != "" {
-		err := os.Symlink(cpioFile.Linkname, file.Path)
+		// The link's parent folder may not have its own entry in the archive.
+		err := x.mkDir(filepath.Dir(file.Path), x.DirMode, cpioFile.ModTime)
 		if err != nil {
-			return 0, fmt.Errorf("%s symlink: %w: %s (from: %s)", cpioFile.FileInfo().Name(), err, file.Path, cpioFile.Name)
+			return 0, fmt.Errorf("making cpio link parent dir: %w", err)
+		}
+
+		err = x.createSymlink(file.Path, cpioFile.Linkname)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", cpioFile.FileInfo().Name(), err)
 		}
 
 		return 0, nil
