@@ -17,8 +17,8 @@ github.com/BooleanCat/go-functional/result
 # github.com/Unpackerr/iso9660 v0.0.3
 ## explicit; go 1.25.7
 github.com/Unpackerr/iso9660
-# github.com/YoshikiShibata/gostream v0.0.0-20231110221303-1f6d7dc07388
-## explicit; go 1.21
+# github.com/YoshikiShibata/gostream v0.1.1
+## explicit; go 1.27
 github.com/YoshikiShibata/gostream
 github.com/YoshikiShibata/gostream/function
 # github.com/andybalholm/brotli v1.2.1
