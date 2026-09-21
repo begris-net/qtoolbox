@@ -1,24 +1,17 @@
 package xtractr
 
-/* Code to find, write, move and delete files. */
+/* Archive types, XFile, extract dispatch, and shared path-name helpers. */
 
 import (
 	"fmt"
-	"io"
-	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
-	"slices"
 	"strconv"
 	"strings"
-	"time"
+	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 )
-
-// ArchiveList is the value returned when searching for compressed files.
-// The map is directory to list of archives in that directory.
-type ArchiveList map[string][]string
 
 type archive struct {
 	Type string
@@ -80,6 +73,7 @@ var extension2function = []archive{
 	{Type: "zstandard", Ext: ".zst", Fn: ChngInt(ExtractZstandard)},
 	{Type: "zstandard", Ext: ".zstd", Fn: ChngInt(ExtractZstandard)},
 	{Type: "zlib", Ext: ".zz", Fn: ChngInt(ExtractZlib)},
+	{Type: "flac", Ext: ".cue.txt", Fn: ExtractCUE},
 	{Type: "flac", Ext: ".cue", Fn: ExtractCUE},
 }
 
@@ -91,6 +85,43 @@ func ChngInt(smallFn func(*XFile) (uint64, []string, error)) Interface {
 		size, files, err := smallFn(xFile)
 		return size, files, []string{xFile.FilePath}, err
 	}
+}
+
+// dispatchWorkers runs work for each entry using a bounded worker pool.
+// Dispatch stops when a worker reports an error, in-flight entries finish,
+// and the first error encountered is returned. Used by the random-access
+// extractors (ZIP, 7z) when XFile.FileWorkers > 1.
+func dispatchWorkers[T any](count int, entries []T, work func(T) error) error {
+	var (
+		waitGroup sync.WaitGroup
+		firstErr  atomic.Pointer[error]
+		semaphore = make(chan struct{}, count)
+	)
+
+	for idx := range entries {
+		if firstErr.Load() != nil {
+			break
+		}
+
+		semaphore <- struct{}{} // acquire worker slot
+
+		waitGroup.Go(func() {
+			defer func() { <-semaphore }() // release worker slot
+
+			err := work(entries[idx])
+			if err != nil {
+				firstErr.CompareAndSwap(nil, &err)
+			}
+		})
+	}
+
+	waitGroup.Wait()
+
+	if err := firstErr.Load(); err != nil {
+		return *err
+	}
+
+	return nil
 }
 
 // SupportedExtensions returns a slice of file extensions this library recognizes.
@@ -114,6 +145,9 @@ type XFile struct {
 	FileMode os.FileMode
 	// Write folders with this mode.
 	DirMode os.FileMode
+	// Suffix brands cross-device copy siblings as a known extra extension
+	// (e.g. movie.mkv.xtractr_partial). Empty uses DefaultSuffix.
+	Suffix string
 	// (RAR/7z) Archive password. Blank for none. Gets prepended to Passwords, below.
 	Password string
 	// (RAR/7z) Archive passwords (to try multiple).
@@ -123,6 +157,16 @@ type XFile struct {
 	// Streaming formats ignore this. 0 or 1 = sequential (current behavior).
 	// Total concurrent I/O when using the queue = Config.Parallel * FileWorkers.
 	FileWorkers int
+	// MaxBytes is the maximum uncompressed bytes written for this archive.
+	// 0 means unlimited.
+	MaxBytes uint64
+	// MaxFiles is the maximum files, directories, and symlinks created for this
+	// archive. 0 means unlimited.
+	MaxFiles int
+	// MaxRatio is the maximum bytesWritten / archiveFileSize. 0 means unlimited.
+	MaxRatio float64
+	// AllowSymlinks allows FilePath to be a symbolic link to an archive.
+	AllowSymlinks bool
 	// Progress is called periodically during file extraction.
 	// Contains info about the progress of the extraction.
 	// This is not called if an Updates channel is also provided.
@@ -141,23 +185,10 @@ type XFile struct {
 	log       Logger
 	moveFiles func(fromPath, toPath string, overwrite bool) ([]string, error)
 	prog      *progressTracker
+	// refused collects files not moved into place during Extract; it is
+	// copied into Response.Refused by processArchive.
+	refused []RefusedFile
 }
-
-// Filter is the input to find compressed files.
-type Filter struct {
-	// This is the path to search in for archives.
-	Path string
-	// Any files with this suffix are ignored. ie. ".7z" or ".iso"
-	// Use the AllExcept func to create an inclusion list instead.
-	ExcludeSuffix Exclude
-	// Count of folder depth allowed when finding archives. 1 = root
-	MaxDepth int
-	// Only find archives this many child-folders deep. 0 and 1 are equal.
-	MinDepth int
-}
-
-// Exclude represents an exclusion list.
-type Exclude []string
 
 // Debugf calls the debug method on the logger if it's not nil.
 func (x *XFile) Debugf(format string, v ...any) {
@@ -166,124 +197,11 @@ func (x *XFile) Debugf(format string, v ...any) {
 	}
 }
 
-// GetFileList returns all the files in a path or paths.
-// This is non-recursive and only returns files _in_ the base paths provided.
-// This is a helper method and only exposed for convenience. You do not have to call this.
-func (x *Xtractr) GetFileList(paths ...string) ([]string, error) {
-	files := []string{}
-
-	for _, path := range paths {
-		stat, err := os.Stat(path)
-		if err != nil {
-			return nil, fmt.Errorf("stat: %w", err)
-		}
-
-		if !stat.IsDir() {
-			files = append(files, path)
-			continue
-		}
-
-		fileList, err := os.ReadDir(path)
-		if err != nil {
-			return nil, fmt.Errorf("reading path %s: %w", path, err)
-		}
-
-		for _, file := range fileList {
-			files = append(files, filepath.Join(path, file.Name()))
-		}
+// Printf calls the print method on the logger if it's not nil.
+func (x *XFile) Printf(format string, v ...any) {
+	if x.log != nil {
+		x.log.Printf(format, v...)
 	}
-
-	return files, nil
-}
-
-// Difference returns all the strings that are in slice2 but not in slice1.
-// Used to find new files in a file list from a path. ie. those we extracted.
-// This is a helper method and only exposed for convenience. You do not have to call this.
-func Difference(slice1, slice2 []string) []string {
-	diff := []string{}
-
-	for _, s2p := range slice2 {
-		var found bool
-
-		if slices.Contains(slice1, s2p) {
-			found = true
-		}
-
-		if !found { // String not found, so it's a new string, add it to the diff.
-			diff = append(diff, s2p)
-		}
-	}
-
-	return diff
-}
-
-// Has returns true if the test has an excluded suffix.
-func (e Exclude) Has(test string) bool {
-	for _, exclude := range e {
-		if strings.HasSuffix(test, strings.ToLower(exclude)) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// FindCompressedFiles returns all the compressed archive files in a path. This attempts to grab
-// only the first file in a multi-part rar or 7zip archive. Sometimes there are multiple archives,
-// so if the rar archive does not have "part" followed by a number in the name, then it will be
-// considered an independent archive. Some packagers seem to use different naming schemes,
-// so this may need to be updated as time progresses. Use the input to Filter to adjust the output.
-func FindCompressedFiles(filter Filter) ArchiveList {
-	return findCompressedFiles(filter.Path, &filter, 0)
-}
-
-func findCompressedFiles(path string, filter *Filter, depth int) ArchiveList {
-	if filter.MaxDepth > 0 && filter.MaxDepth < depth {
-		return nil
-	}
-
-	dir, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	defer dir.Close()
-
-	info, err := dir.Stat()
-	if err != nil {
-		return nil // unreadable folder?
-	}
-
-	if !info.IsDir() && IsArchiveFile(path) {
-		return ArchiveList{path: {path}} // passed in an archive file; send it back out.
-	}
-
-	fileList := getFilteredFileList(path, dir)
-	if len(fileList) == 0 {
-		return nil
-	}
-
-	return getCompressedFiles(path, filter, fileList, depth)
-}
-
-// getFilteredFileList reads the directory and returns a list of readable files that are not dot files.
-func getFilteredFileList(path string, dir *os.File) []os.FileInfo {
-	names, _ := dir.Readdirnames(-1)
-	fileList := make([]os.FileInfo, 0, len(names))
-
-	for _, name := range names {
-		if name == "" || name[0] == '.' {
-			continue // skip dot files (including AppleDouble ._* entries)
-		}
-
-		info, err := os.Lstat(filepath.Join(path, name))
-		if err != nil {
-			continue // skip entries we can't stat
-		}
-
-		fileList = append(fileList, info)
-	}
-
-	return fileList
 }
 
 // IsArchiveFile returns true if the provided path has an archive file extension.
@@ -300,52 +218,6 @@ func IsArchiveFile(path string) bool {
 	}
 
 	return false
-}
-
-// CheckR00ForRarFile scans the file list to determine if a .rar file with the same name as .r00 exists.
-// Returns true if the r00 files has an accompanying rar file in the fileList.
-func CheckR00ForRarFile(fileList []os.FileInfo, r00file string) bool {
-	findFile := strings.TrimSuffix(strings.TrimSuffix(r00file, ".R00"), ".r00") + ".rar"
-
-	for _, file := range fileList {
-		if strings.EqualFold(file.Name(), findFile) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// getCompressedFiles checks file suffixes to find archives to decompress.
-// This pays special attention to the widely accepted variance of rar formats.
-func getCompressedFiles(path string, filter *Filter, fileList []os.FileInfo, depth int) ArchiveList { //nolint:cyclop
-	files := ArchiveList{}
-
-	for _, file := range fileList {
-		switch lowerName := strings.ToLower(file.Name()); {
-		case !file.IsDir() &&
-			(filter.ExcludeSuffix.Has(lowerName) || depth < filter.MinDepth):
-			continue // file suffix is excluded or we are not deep enough.
-		case lowerName == "" || lowerName[0] == '.':
-			continue // ignore empty names and dot files/folders.
-		case file.IsDir(): // Recurse.
-			maps.Copy(files, findCompressedFiles(filepath.Join(path, file.Name()), filter, depth+1))
-		case strings.HasSuffix(lowerName, ".rar"):
-			hasParts := regexp.MustCompile(`.*\.part\d+\.rar$`)
-			partOne := regexp.MustCompile(`.*\.part0*1\.rar$`)
-			// Some archives are named poorly. Only return part01 or part001, not all.
-			if !hasParts.MatchString(lowerName) || partOne.MatchString(lowerName) {
-				files[path] = append(files[path], filepath.Join(path, file.Name()))
-			}
-		case strings.HasSuffix(lowerName, ".r00") && !CheckR00ForRarFile(fileList, lowerName):
-			// Accept .r00 as the first archive file if no .rar files are present in the path.
-			files[path] = append(files[path], filepath.Join(path, file.Name()))
-		case !strings.HasSuffix(lowerName, ".r00") && IsArchiveFile(lowerName):
-			files[path] = append(files[path], filepath.Join(path, file.Name()))
-		}
-	}
-
-	return files
 }
 
 // normalizeVolumes maps the volume list reported by an archive decoder into
@@ -397,27 +269,44 @@ func (x *XFile) Extract() (size uint64, filesList, archiveList []string, err err
 // ExtractFile calls the correct procedure for the type of file being extracted.
 // Returns size of extracted data, list of extracted files, list of archives processed, and/or error.
 func ExtractFile(xFile *XFile) (size uint64, filesList, archiveList []string, err error) {
+	err = refuseSymlinkArchiveUnlessAllowed(xFile)
+	if err != nil {
+		return 0, nil, nil, wrapSymlinkArchiveError(xFile, err)
+	}
+
 	sName := strings.ToLower(xFile.FilePath)
-	// just borrowing this... Has to go into an interface to avoid a cycle.
-	xFile.moveFiles = parseConfig(&Config{Logger: xFile.log}).MoveFiles
+	xFile.bindMoveFiles()
 
 	var extensionType string // archive type from matched extension, for error reporting when extraction fails
 
 	for _, ext := range extension2function {
-		if strings.HasSuffix(sName, ext.Ext) {
-			size, filesList, archiveList, err = ext.Fn(xFile)
-			if err == nil {
-				return size, filesList, archiveList, nil
-			}
-
-			extensionType = ext.Type // preserve for error reporting before fallback
-			// Extension matched but extraction failed; try signature detection as fallback.
-			break
+		if !strings.HasSuffix(sName, ext.Ext) {
+			continue
 		}
+
+		size, filesList, archiveList, err = ext.Fn(xFile)
+		if err == nil {
+			return size, filesList, archiveList, nil
+		}
+
+		// A resource cap aborts the extraction; do not re-extract via signature
+		// detection, which would reset the counters and could even report success.
+		if IsLimitError(err) {
+			return size, filesList, archiveList, err
+		}
+
+		extensionType = ext.Type // preserve for error reporting before fallback
+		// Extension matched but extraction failed; try signature detection as fallback.
+		break
 	}
 
 	// Fall back to file signature (magic number) detection.
-	xFile.Debugf("falling back to signature detection for %s (extension error: %v)", xFile.FilePath, err)
+	if err != nil {
+		xFile.Debugf("extension-based extraction failed for %s, falling back to signature detection: %v",
+			xFile.FilePath, err)
+	} else {
+		xFile.Debugf("no extension match for %s, falling back to signature detection", xFile.FilePath)
+	}
 
 	extractFn, archiveType, sigErr := detectBySignature(xFile.FilePath)
 	if sigErr != nil {
@@ -441,80 +330,6 @@ func ExtractFile(xFile *XFile) (size uint64, filesList, archiveList []string, er
 	}
 
 	return size, filesList, archiveList, nil
-}
-
-// MoveFiles relocates files then removes the folder they were in.
-// Returns the new file paths.
-// This is a helper method and only exposed for convenience. You do not have to call this.
-func (x *Xtractr) MoveFiles(fromPath, toPath string, overwrite bool) ([]string, error) { //nolint:cyclop
-	var (
-		newFiles = []string{}
-		keepErr  error
-	)
-
-	files, err := x.GetFileList(fromPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// If the "to path" is an existing archive file, remove the suffix to make a directory.
-	_, err = os.Stat(toPath)
-	if err == nil && IsArchiveFile(toPath) {
-		toPath = strings.TrimSuffix(toPath, filepath.Ext(toPath))
-	}
-
-	x.config.Debugf("Moving files: %v (%d files) -> %v", fromPath, len(files), toPath)
-
-	err = os.MkdirAll(toPath, x.config.DirMode)
-	if err != nil {
-		return nil, fmt.Errorf("making final dir: %w", err)
-	}
-
-	for _, file := range files {
-		var (
-			newFile = filepath.Join(toPath, filepath.Base(file))
-			_, err  = os.Stat(newFile)
-			exists  = !os.IsNotExist(err)
-		)
-
-		if exists && !overwrite {
-			x.config.Printf("Error: Renaming Temp File: %v to %v: (refusing to overwrite existing file)", file, newFile)
-			// keep trying.
-			continue
-		}
-
-		switch err = x.Rename(file, newFile); {
-		case err != nil:
-			keepErr = err
-			x.config.Printf("Error: Renaming Temp File: %v to %v: %v", file, newFile, err)
-		case exists:
-			newFiles = append(newFiles, newFile)
-			x.config.Debugf("Renamed Temp File: %v -> %v (overwrote existing file)", file, newFile)
-		default:
-			newFiles = append(newFiles, newFile)
-			x.config.Debugf("Renamed Temp File: %v -> %v", file, newFile)
-		}
-	}
-
-	x.DeleteFiles(fromPath)
-	// Since this is the last step, we tried to rename all the files, bubble the
-	// os.Rename error up, so it gets flagged as failed. It may have worked, but
-	// it should get attention.
-	return newFiles, keepErr
-}
-
-// DeleteFiles obliterates things and logs. Use with caution.
-func (x *Xtractr) DeleteFiles(files ...string) {
-	for _, file := range files {
-		err := os.RemoveAll(file)
-		if err != nil {
-			x.config.Printf("Error: Deleting %v: %v", file, err)
-
-			continue
-		}
-
-		x.config.Printf("Deleted (recursively): %s", file)
-	}
 }
 
 // nameMax is the typical filesystem limit for a single path component (POSIX NAME_MAX).
@@ -566,148 +381,13 @@ func truncateToBytes(str string, maxBytes int) string {
 		return str
 	}
 
-	bytes := []byte(str)
-	for len(bytes) > maxBytes {
-		_, size := utf8.DecodeLastRune(bytes)
-		bytes = bytes[:len(bytes)-size]
+	raw := []byte(str)
+	for len(raw) > maxBytes {
+		_, size := utf8.DecodeLastRune(raw)
+		raw = raw[:len(raw)-size]
 	}
 
-	return string(bytes)
-}
-
-// openFile opens path with the given flags and mode. If the path exceeds
-// filesystem name limits, the path is truncated via TruncatePathForFS and
-// retried. It returns the opened file and the path that was actually used
-// (the original or the truncated path), so the caller can update file.Path
-// for later use (e.g. os.Chtimes).
-func openFile(path string, flags int, mode os.FileMode) (*os.File, string, error) {
-	openFile, err := os.OpenFile(path, flags, mode)
-	if err == nil {
-		return openFile, path, nil
-	}
-
-	if !IsErrNameTooLong(err) {
-		return nil, "", fmt.Errorf("os.OpenFile(): %w", err)
-	}
-
-	shortPath, truncErr := TruncatePathForFS(path)
-	if truncErr != nil {
-		return nil, "", truncErr
-	}
-
-	openFile, err = os.OpenFile(shortPath, flags, mode)
-	if err != nil {
-		return nil, "", fmt.Errorf("os.OpenFile(): %w", err)
-	}
-
-	return openFile, shortPath, nil
-}
-
-type file struct {
-	Path     string
-	Data     io.Reader
-	FileMode os.FileMode
-	DirMode  os.FileMode
-	Mtime    time.Time
-	Atime    time.Time
-}
-
-// Rename is an attempt to deal with "invalid cross link device" on weird file systems.
-func (x *Xtractr) Rename(oldpath, newpath string) error {
-	origErr := os.Rename(oldpath, newpath)
-	if origErr == nil {
-		return nil
-	}
-
-	origErr = fmt.Errorf("os.Rename(): %w", origErr)
-
-	/* Rename failed, try copy. */
-
-	oldFileStat, err := os.Stat(oldpath)
-	if err != nil {
-		return &ExtractError{Errs: []error{origErr, fmt.Errorf("os.Stat(): %w", err)}}
-	}
-
-	oldFile, err := os.Open(oldpath) // do not forget to close this!
-	if err != nil {
-		return &ExtractError{Errs: []error{origErr, fmt.Errorf("os.Open(): %w", err)}}
-	}
-
-	newFile, _, err := openFile(newpath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, oldFileStat.Mode())
-	if err != nil {
-		return &ExtractError{Errs: []error{origErr, err}}
-	}
-	defer newFile.Close()
-
-	_, err = io.Copy(newFile, oldFile)
-	if err != nil {
-		return &ExtractError{Errs: []error{origErr, fmt.Errorf("io.Copy(): %w", err)}}
-	}
-
-	_ = os.Chtimes(newpath, oldFileStat.ModTime(), oldFileStat.ModTime())
-	// The copy was successful, so now delete the original file
-	_ = oldFile.Close() // Needs to be closed before delete.
-	_ = os.Remove(oldpath)
-
-	return nil
-}
-
-// AllExcept can be used as an input to ExcludeSuffix in a Filter.
-// Returns a list of supported extensions minus the ones provided.
-// Extensions for like-types such as .rar and .r00 need to both be provided.
-// Same for .tar.gz and .tgz variants.
-func AllExcept(onlyThese ...string) Exclude {
-	// Start by excluding everything.
-	output := SupportedExtensions()
-
-	// Loop through the extensions we want to keep.
-	for _, str := range onlyThese {
-		idx := 0
-		// Remove each one from the output list.
-		for _, ext := range output {
-			if !strings.EqualFold(ext, str) {
-				output[idx] = ext
-				idx++
-			}
-		}
-		// Truncate the output to the size of items kept.
-		output = output[:idx]
-	}
-
-	return output
-}
-
-// Count returns the number of unique archives in the archive list.
-func (a ArchiveList) Count() int {
-	var count int
-
-	for _, files := range a {
-		count += len(files)
-	}
-
-	return count
-}
-
-// Random returns a random file listing from the archive list.
-// If the list only contains one directory, then that is the one returned.
-// If the archive list is empty or nil, returns nil.
-func (a ArchiveList) Random() []string {
-	for _, files := range a {
-		return files
-	}
-
-	return nil
-}
-
-// List returns all of the archives as a string slice.
-func (a ArchiveList) List() []string {
-	list := make([]string, 0, len(a))
-
-	for _, files := range a {
-		list = append(list, files...)
-	}
-
-	return list
+	return string(raw)
 }
 
 // SetLogger sets the logger interface on an XFile. Useful when you need to debug what it's doing.
@@ -715,128 +395,35 @@ func (x *XFile) SetLogger(logger Logger) {
 	x.log = logger
 }
 
-// cleanup runs after a successful extract.
-// The intent it to move files into their final location.
-func (x *XFile) cleanup(files []string) ([]string, error) {
-	files, err := x.squashRoot(files)
+func wrapSymlinkArchiveError(xFile *XFile, err error) error {
+	if xFile == nil {
+		return err
+	}
+
+	return NewExtractError(err, xFile.FilePath, xFile.OutputDir, 0, "")
+}
+
+func refuseSymlinkArchiveUnlessAllowed(xFile *XFile) error {
+	if xFile == nil || xFile.AllowSymlinks {
+		return nil
+	}
+
+	return refuseSymlinkArchive(xFile.FilePath)
+}
+
+func refuseSymlinkArchive(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	info, err := os.Lstat(path)
 	if err != nil {
-		return files, err
+		return fmt.Errorf("lstat archive: %w", err)
 	}
 
-	return files, nil
-}
-
-func (x *XFile) squashRoot(files []string) ([]string, error) {
-	if !x.SquashRoot {
-		return files, nil
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: %s", ErrArchiveSymlink, path)
 	}
 
-	roots := map[string]struct{}{}
-
-	for _, path := range files {
-		// Remove the output dir suffix, then split on `/` (or `\`) and get the first item.
-		newRoot := strings.TrimLeft(strings.TrimPrefix(path, x.OutputDir), string(filepath.Separator))
-		roots[strings.SplitN(newRoot, string(filepath.Separator), 2)[0]] = struct{}{} //nolint:mnd
-	}
-
-	if len(roots) == 1 { // only 1 root folder...
-		for root := range roots { // ...move it's content up a level.
-			return x.moveFiles(filepath.Join(x.OutputDir, root), x.OutputDir, false)
-		}
-	}
-
-	return files, nil
-}
-
-func (x *XFile) safeDirMode(current os.FileMode) os.FileMode {
-	if current.Perm() == 0 {
-		return x.DirMode
-	}
-
-	const minimum = 0o700 // ensure owner has read/write/exec on folders.
-
-	return current | minimum
-}
-
-func (x *XFile) safeFileMode(current os.FileMode) os.FileMode {
-	if current.Perm() == 0 {
-		return x.FileMode
-	}
-
-	const minimum = 0o400 // ensure owner has read access to the file.
-
-	return current | minimum
-}
-
-func openStatFile(path string) (*os.File, os.FileInfo, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("os.Open: %w", err)
-	}
-
-	stat, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		return nil, nil, fmt.Errorf("file.Stat: %w", err)
-	}
-
-	return file, stat, nil
-}
-
-func (x *XFile) mkDir(path string, mode os.FileMode, mtime time.Time) error {
-	defer os.Chtimes(path, time.Time{}, mtime)
-	return os.MkdirAll(path, x.safeDirMode(mode)) //nolint:wrapcheck
-}
-
-// write a file from an io reader, making sure all parent directories exist.
-// Set parallel to true when writing from concurrent workers to throttle progress callbacks.
-func (x *XFile) write(file *file) (uint64, error) {
-	return x.writeFile(file, false)
-}
-
-func (x *XFile) writeParallel(file *file) (uint64, error) {
-	return x.writeFile(file, true)
-}
-
-func (x *XFile) writeFile(file *file, parallel bool) (uint64, error) {
-	err := x.mkDir(filepath.Dir(file.Path), file.DirMode, file.Mtime)
-	if err != nil {
-		return 0, fmt.Errorf("writing archived file '%s' parent folder: %w", filepath.Base(file.Path), err)
-	}
-
-	fout, pathUsed, err := openFile(file.Path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, x.safeFileMode(file.FileMode))
-	if err != nil {
-		return 0, err
-	}
-	defer fout.Close()
-
-	file.Path = pathUsed
-
-	progWriter := x.prog.writer(fout)
-	if parallel {
-		progWriter = x.prog.parallelWriter(fout)
-	}
-
-	size, err := io.Copy(progWriter, file.Data)
-	if err != nil {
-		return uint64(size), fmt.Errorf("copying archived file '%s' io: %w", file.Path, err)
-	}
-
-	// The error is ignored because it's not critical and pops up on OSes like Windows.
-	defer os.Chtimes(file.Path, file.Atime, file.Mtime)
-
-	return uint64(size), nil
-}
-
-// clean returns an absolute path for a file inside the OutputDir.
-// If trim length is > 0, then the suffixes are trimmed, and filepath removed.
-func (x *XFile) clean(filePath string, trim ...string) string {
-	if len(trim) != 0 {
-		filePath = filepath.Base(filePath)
-		for _, suffix := range trim {
-			filePath = strings.TrimSuffix(filePath, suffix)
-		}
-	}
-
-	return filepath.Clean(filepath.Join(x.OutputDir, filePath))
+	return nil
 }

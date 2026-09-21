@@ -52,6 +52,30 @@ type Xtract struct {
 	// Contains info about the progress of the extraction.
 	// Shared by all archive file extractions that occur with this Xtract.
 	Updates chan Progress
+	// MaxBytes is the maximum uncompressed bytes written for one top-level
+	// archive. Extras in that folder share the tighter leftover among those
+	// archives. 0 means unlimited; when 0, Config.MaxBytes is used.
+	// Standalone XFile remains per-archive.
+	MaxBytes uint64
+	// MaxFiles is the maximum files, directories, and symlinks created for
+	// one top-level archive (extras share the tighter leftover). 0 means
+	// unlimited; when 0, Config.MaxFiles is used. Standalone XFile remains
+	// per-archive.
+	MaxFiles int
+	// MaxRatio is totalWritten / that archive's compressed size. Extras keep
+	// the parent size (child sizes are not added) and share the tighter
+	// leftover. 0 means unlimited; when 0, Config.MaxRatio is used.
+	// Standalone XFile remains per-archive.
+	MaxRatio float64
+	// MaxNested is the maximum archives extracted from one source folder's
+	// output (one extras pass). 0 means unlimited; when 0, Config.MaxNested
+	// is used. Negative also means unlimited. Not a job-wide total across
+	// decompressFolders, and not a second-round nesting budget.
+	MaxNested int
+	// ExtrasMaxDepth is how deep the extras pass walks extract output.
+	// 0 means unlimited; when 0, Config.ExtrasMaxDepth is used. Negative
+	// also means unlimited. Distinct from Filter.MaxDepth (initial search).
+	ExtrasMaxDepth int
 }
 
 // Response is sent to the call-back function. The first CBFunction call is just
@@ -59,24 +83,49 @@ type Xtract struct {
 // call by checking Response.Done. false = started, true = finished. When done=false
 // the only other meaningful data provided is the re.Archives, re.Output and re.Queue.
 type Response struct {
-	// Extract Started (false) or Finished (true).
+	// Done is false on the start notification and true on the single finished
+	// callback. Only the finished callback carries the full result below.
 	Done bool
-	// Size of data written.
+	// Size is the total uncompressed bytes written to disk across all archives,
+	// including Extras. Only set when Done is true.
 	Size uint64
-	// Temporary output folder.
+	// Output is the temporary folder files were extracted into (Path+Suffix,
+	// rebased onto ExtractTo when set). When TempFolder is true it is updated
+	// to the final renamed folder; when TempFolder is false its contents are
+	// moved out and the folder removed, so it is empty by the time Done is true.
 	Output string
-	// Items still in queue.
+	// Queued is how many extractions are still waiting in the queue at the
+	// moment this response is sent. Useful for progress display.
 	Queued int
-	// When this extract began.
+	// Started is when extraction of this item began.
 	Started time.Time
-	// Elapsed extraction duration. ie. How long it took.
+	// Elapsed is how long the extraction took. Only set when Done is true.
 	Elapsed time.Duration
-	// Extra archives extracted from within an archive.
+	// Extras are archives found inside an extracted archive and also extracted
+	// (skipped when DisableRecursion is true).
 	Extras ArchiveList
-	// Initial archives found and extracted.
+	// Archives are the archives found in the search path and extracted.
 	Archives ArchiveList
-	// Files written to final path.
+	// NewFiles lists the final paths of files that were moved into place.
+	// Only set when Done is true.
 	NewFiles []string
+	// Refused lists files that were extracted but not moved into the final
+	// path because the destination was already occupied. The occupying file
+	// may have arrived with the download; it was kept. A refusal alone does
+	// not set an error. The same logical file can appear twice (with different
+	// Src paths) if it is refused during the squash move and again during the
+	// final folder move; consumers should dedupe by Dest.
+	Refused []RefusedFile
+	// FinalDests maps each input folder that produced a completed final move
+	// to the directory its files were moved into. The key is the per-folder
+	// X.Path (a key of Archives), so a caller can correlate each destination
+	// — and each Refused entry — back to the folder that produced it.
+	// A folder is omitted until its move completes without error (in-progress
+	// callbacks, and any move that returned an error). When TempFolder is true
+	// the whole output tree is renamed once, so this map has a single entry
+	// keyed by the original search Path. Dest is recorded even when NewFiles
+	// is empty (every destination already occupied, or a no-op squash).
+	FinalDests map[string]string
 	// SkipOnRecursion lists paths that extractors copied into output (e.g. CUE sheet)
 	// and must not be re-extracted when recursing. Other files (e.g. CUE from a RAR) are still extracted.
 	SkipOnRecursion []string
@@ -84,6 +133,10 @@ type Response struct {
 	Error error
 	// Copied from input data.
 	X *Xtract
+	// budgets are per top-level archive trackers in this folder.
+	budgets []*progressTracker
+	// budget is the extras tracker: the tighter leftover among budgets.
+	budget *progressTracker
 }
 
 // Extract is how external code begins an extraction process against a path.
@@ -176,6 +229,7 @@ func (x *Xtractr) decompressFolders(resp *Response) error {
 				Filter: Filter{
 					Path:          subDir,
 					ExcludeSuffix: resp.X.ExcludeSuffix,
+					AllowSymlinks: resp.X.AllowSymlinks,
 				},
 				Name:             resp.X.Name,
 				Password:         resp.X.Password,
@@ -188,6 +242,11 @@ func (x *Xtractr) decompressFolders(resp *Response) error {
 				LogFile:          resp.X.LogFile,
 				Updates:          resp.X.Updates,
 				Progress:         resp.X.Progress,
+				MaxBytes:         resp.X.MaxBytes,
+				MaxFiles:         resp.X.MaxFiles,
+				MaxRatio:         resp.X.MaxRatio,
+				MaxNested:        resp.X.MaxNested,
+				ExtrasMaxDepth:   resp.X.ExtrasMaxDepth,
 			},
 			Started:  resp.Started,
 			Output:   output,
@@ -196,7 +255,9 @@ func (x *Xtractr) decompressFolders(resp *Response) error {
 
 		err := x.decompressFiles(subResp)
 		resp.NewFiles = append(resp.NewFiles, subResp.NewFiles...)
+		resp.Refused = append(resp.Refused, subResp.Refused...)
 		resp.Size += subResp.Size
+		mergeFinalDests(resp, subResp)
 
 		if err != nil {
 			return err
@@ -262,37 +323,6 @@ func weExtractedAnISO(resp *Response) bool {
 	return false
 }
 
-// excludePathsFromArchiveList returns a copy of list with any archive path that
-// appears in exclude (e.g. resp.SkipOnRecursion) removed.
-func excludePathsFromArchiveList(list ArchiveList, exclude []string) ArchiveList {
-	if len(exclude) == 0 {
-		return list
-	}
-
-	skip := make(map[string]bool, len(exclude))
-	out := make(ArchiveList, len(list))
-
-	for _, p := range exclude {
-		skip[filepath.Clean(p)] = true
-	}
-
-	for dir, archives := range list {
-		keep := make([]string, 0, len(archives))
-
-		for _, p := range archives {
-			if !skip[filepath.Clean(p)] {
-				keep = append(keep, p)
-			}
-		}
-
-		if len(keep) > 0 {
-			out[dir] = keep
-		}
-	}
-
-	return out
-}
-
 // decompressFiles runs after we find and verify archives exist.
 // This extracts everything in the search path then (optionally)
 // checks the output path for more archives that were just decompressed.
@@ -306,30 +336,39 @@ func (x *Xtractr) decompressFiles(resp *Response) error {
 		return x.cleanupProcessedArchives(resp)
 	}
 
-	// Now do it again with the output folder.
-	resp.Extras = FindCompressedFiles(Filter{
-		Path:          resp.Output,
-		ExcludeSuffix: resp.X.ExcludeSuffix,
-	})
-	// Do not try to extract files that an extractor copied into output (e.g. CUE sheet);
-	// re-extracting the copied CUE would fail and delete the output directory.
-	// Other archives in the output (e.g. CUE+FLAC from a RAR) are still extracted.
-	resp.Extras = excludePathsFromArchiveList(resp.Extras, resp.SkipOnRecursion)
+	// Now do it again with the output folder. extrasFilter.Accept skips
+	// extractor-copied paths and duplicate device+inode aliases so they
+	// do not consume MaxArchives.
+	resp.Extras = FindCompressedFiles(x.extrasFilter(resp))
+
+	err = x.checkExtrasLimit(resp)
+	if err != nil {
+		x.DeleteFiles(resp.Output)
+		return err
+	}
+
 	nre := &Response{
 		X: &Xtract{
-			Password:  resp.X.Password,
-			Passwords: resp.X.Passwords,
-			Progress:  resp.X.Progress,
-			Updates:   resp.X.Updates,
+			Password:       resp.X.Password,
+			Passwords:      resp.X.Passwords,
+			Progress:       resp.X.Progress,
+			Updates:        resp.X.Updates,
+			MaxBytes:       resp.X.MaxBytes,
+			MaxFiles:       resp.X.MaxFiles,
+			MaxRatio:       resp.X.MaxRatio,
+			MaxNested:      resp.X.MaxNested,
+			ExtrasMaxDepth: resp.X.ExtrasMaxDepth,
 		},
 		Started:  resp.Started,
 		Output:   resp.Output,
 		Archives: resp.Extras,
+		budget:   x.extrasBudget(resp),
 	}
 	err = x.decompressArchives(nre)
 	// Combine the new Response with the existing response.
 	resp.Extras = nre.Archives
 	resp.Size += nre.Size
+	resp.Refused = append(resp.Refused, nre.Refused...)
 
 	if nre.NewFiles != nil {
 		resp.NewFiles = append(resp.NewFiles, nre.NewFiles...)
@@ -382,29 +421,110 @@ func (x *Xtractr) processArchive(filename string, resp *Response) (uint64, []str
 	x.config.Debugf("Extracting File: %v to %v", filename, resp.Output)
 
 	xFile := &XFile{
-		FilePath:    filename,
-		OutputDir:   resp.Output,
-		FileMode:    x.config.FileMode,
-		DirMode:     x.config.DirMode,
-		Passwords:   resp.X.Passwords,
-		Password:    resp.X.Password,
-		FileWorkers: x.config.FileWorkers,
-		log:         x.config.Logger,
-		Updates:     resp.X.Updates,
-		Progress:    resp.X.Progress,
+		FilePath:      filename,
+		OutputDir:     resp.Output,
+		FileMode:      x.config.FileMode,
+		DirMode:       x.config.DirMode,
+		Suffix:        x.config.Suffix,
+		Passwords:     resp.X.Passwords,
+		Password:      resp.X.Password,
+		FileWorkers:   x.config.FileWorkers,
+		MaxBytes:      pick(resp.X.MaxBytes, x.config.MaxBytes),
+		MaxFiles:      pick(resp.X.MaxFiles, x.config.MaxFiles),
+		MaxRatio:      pick(resp.X.MaxRatio, x.config.MaxRatio),
+		AllowSymlinks: resp.X.AllowSymlinks,
+		log:           x.config.Logger,
+		Updates:       resp.X.Updates,
+		Progress:      resp.X.Progress,
+		prog:          resp.budget,
 	}
 
-	bytes, files, archives, err := ExtractFile(xFile)
-	if err != nil {
-		x.DeleteFiles(resp.Output) // clean up the mess after an error and bail.
-		return bytes, files, archives, WrapExtractError(err, xFile, bytes, "")
+	if xFile.prog == nil {
+		xFile.prog = newSharedBudget()
+		resp.budgets = append(resp.budgets, xFile.prog)
 	}
+
+	wroteBefore := xFile.prog.wrote()
+	_, files, archives, err := ExtractFile(xFile)
+	bytes := xFile.prog.wrote() - wroteBefore
 
 	if len(xFile.SkipOnRecursion) > 0 {
 		resp.SkipOnRecursion = append(resp.SkipOnRecursion, xFile.SkipOnRecursion...)
 	}
 
+	// Collect refusals before the error check so a failed extract still reports them.
+	resp.Refused = append(resp.Refused, xFile.refused...)
+
+	if err != nil {
+		x.DeleteFiles(resp.Output) // clean up the mess after an error and bail.
+		return bytes, files, archives, WrapExtractError(err, xFile, bytes, "")
+	}
+
 	return bytes, files, archives, nil
+}
+
+func pick[T uint64 | int | float64](vals ...T) T { //nolint:ireturn // numeric union, not an interface.
+	var zero T
+
+	for _, val := range vals {
+		if val != zero {
+			return val
+		}
+	}
+
+	return zero
+}
+
+func (x *Xtractr) extrasBudget(resp *Response) *progressTracker {
+	return tighterBudget(
+		resp.budgets,
+		pick(resp.X.MaxBytes, x.config.MaxBytes),
+		pick(resp.X.MaxFiles, x.config.MaxFiles),
+		pick(resp.X.MaxRatio, x.config.MaxRatio),
+	)
+}
+
+func (x *Xtractr) extrasFilter(resp *Response) Filter {
+	filter := Filter{
+		Path:          resp.Output,
+		ExcludeSuffix: resp.X.ExcludeSuffix,
+		MaxDepth:      pick(resp.X.ExtrasMaxDepth, x.config.ExtrasMaxDepth),
+		Accept:        extrasAccept(resp.SkipOnRecursion),
+	}
+
+	if limit := pick(resp.X.MaxNested, x.config.MaxNested); limit > 0 {
+		filter.MaxArchives = limit + 1
+	}
+
+	return filter
+}
+
+// extrasAccept skips extractor-copied paths (e.g. a CUE sheet) and later
+// names that share a device+inode with a path already accepted.
+func extrasAccept(exclude []string) func(ArchiveCandidate) bool {
+	skip := make(map[string]bool, len(exclude))
+	for _, p := range exclude {
+		skip[filepath.Clean(p)] = true
+	}
+
+	// This lives through the extras pass.
+	seen := make(map[string]struct{})
+
+	return func(candidate ArchiveCandidate) bool {
+		return !skip[filepath.Clean(candidate.Path)] && rememberFile(seen, candidate.Path)
+	}
+}
+
+// checkExtrasLimit applies MaxNested to this extras list only (one source
+// folder, one extras pass). Archives left unextracted inside those extras
+// are not counted.
+func (x *Xtractr) checkExtrasLimit(resp *Response) error {
+	limit := pick(resp.X.MaxNested, x.config.MaxNested)
+	if limit <= 0 || resp.Extras.Count() <= limit {
+		return nil
+	}
+
+	return fmt.Errorf("%w: %d archives (max %d)", ErrMaxNested, resp.Extras.Count(), limit)
 }
 
 func (x *Xtractr) cleanupProcessedArchives(resp *Response) error {
@@ -422,7 +542,12 @@ func (x *Xtractr) cleanupProcessedArchives(resp *Response) error {
 	if !resp.X.TempFolder {
 		time.Sleep(fsSyncDelay) // Wait for file system to catch up/sync.
 		// If TempFolder is false then move the files back to the original location.
-		resp.NewFiles, err = x.MoveFiles(resp.Output, resp.X.Path, false)
+		var renamed Renamed
+
+		renamed, err = x.RenameFiles(resp.Output, resp.X.Path, false)
+		resp.NewFiles = renamed.NewFiles
+		resp.Refused = append(resp.Refused, renamed.Refused...)
+		recordFinalDest(resp, resp.X.Path, renamed.Dest)
 	}
 
 	if err != nil {
@@ -515,13 +640,16 @@ func (x *Xtractr) cleanTempFolder(resp *Response) {
 		return
 	}
 
-	newFiles, err := x.MoveFiles(resp.Output, newName, false)
+	renamed, err := x.RenameFiles(resp.Output, newName, false)
+	resp.Refused = append(resp.Refused, renamed.Refused...)
+
 	if err != nil {
 		x.config.Printf("Error: Renaming Temporary Folder: %v", err)
 	} else {
 		x.config.Debugf("Renamed Temp Folder: %v -> %v", resp.Output, newName)
 		resp.Output = newName
-		resp.NewFiles = newFiles
+		resp.NewFiles = renamed.NewFiles
+		recordFinalDest(resp, resp.X.Path, renamed.Dest)
 	}
 
 	files, err := x.GetFileList(resp.X.Path)
@@ -533,5 +661,29 @@ func (x *Xtractr) cleanTempFolder(resp *Response) {
 	if len(files) == 0 {
 		// If the original path is empty, delete it.
 		x.DeleteFiles(resp.X.Path)
+	}
+}
+
+// recordFinalDest records a completed move. Empty dir or dest is ignored so a
+// failed move (Renamed.Dest == "") never occupies a map slot.
+func recordFinalDest(resp *Response, dir, dest string) {
+	if resp == nil || dir == "" || dest == "" {
+		return
+	}
+
+	if resp.FinalDests == nil {
+		resp.FinalDests = make(map[string]string)
+	}
+
+	resp.FinalDests[dir] = dest
+}
+
+func mergeFinalDests(dst, src *Response) {
+	if dst == nil || src == nil {
+		return
+	}
+
+	for dir, dest := range src.FinalDests {
+		recordFinalDest(dst, dir, dest)
 	}
 }
