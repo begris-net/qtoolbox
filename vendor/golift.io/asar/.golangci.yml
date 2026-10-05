@@ -1,0 +1,54 @@
+version: '2'
+linters:
+  default: all
+  disable:
+    - nlreturn
+    - exhaustruct
+    - exhaustruct_v5
+    - depguard
+    - nonamedreturns
+    - forbidigo
+    - wsl
+    - goconst
+    - gomodguard
+    - testpackage
+  exclusions:
+    rules:
+      - linters:
+          - funlen
+          - goconst
+          - wsl
+          - errcheck
+          - err113
+          - errchkjson
+        path: .+_test.go
+  settings:
+    gosec:
+      excludes:
+        - G304
+        - G115
+    gocritic:
+      enable-all: true
+      disabled-checks:
+        - whyNoLint
+        - commentedOutCode
+      settings:
+        unnamedResult:
+          checkExported: true
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      disable-default-exclusions: false
+      exclude-functions:
+        - (*os.File).Close
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  fix: true
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports

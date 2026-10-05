@@ -1,0 +1,52 @@
+version: '2'
+linters:
+  default: all
+  disable:
+    - wsl # deprecated
+    - gomodguard # deprecated
+    - exhaustruct # deprecated
+    # too noisy for a binary encoder.
+    - exhaustruct_v5
+    - mnd
+    - varnamelen
+  exclusions:
+    rules:
+      - linters:
+          - cyclop
+          - gocognit
+          - lll
+          - noctx
+          - testpackage
+          - funlen
+        path: .+_test.go
+  settings:
+    depguard:
+      rules:
+        main:
+          allow:
+            - $gostd
+            - golift.io/ape
+    gosec:
+      excludes:
+        - G304
+        - G115
+    gocritic:
+      enable-all: true
+      settings:
+        unnamedResult:
+          checkExported: true
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      disable-default-exclusions: false
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  fix: true
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
