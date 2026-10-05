@@ -1,10 +1,10 @@
 package xtractr
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/Unpackerr/iso9660"
 )
@@ -26,30 +26,55 @@ func ExtractISO(xFile *XFile) (size uint64, filesList []string, err error) {
 		return size, filesList, nil
 	}
 
-	xFile.Debugf("UDF extraction failed for %s, falling back to ISO9660: %v", xFile.FilePath, udfErr)
+	if IsLimitError(udfErr) {
+		if xFile.prog != nil {
+			xFile.prog.done()
+		}
 
-	// Fall back to ISO9660 (now with Joliet support for full filenames).
-	image, isoErr := iso9660.OpenImage(openISO)
-	if isoErr != nil {
-		return 0, nil, fmt.Errorf("failed to open iso image: %s: %w", xFile.FilePath, isoErr)
+		return size, filesList, udfErr
 	}
 
-	defer xFile.newProgress(getUncompressedIsoSize(image)).done()
+	xFile.Debugf("UDF extraction failed for %s, falling back to ISO9660: %v", xFile.FilePath, udfErr)
+
+	return extractISO9660(xFile, openISO, udfErr)
+}
+
+func extractISO9660(xFile *XFile, openISO *os.File, udfErr error) (uint64, []string, error) {
+	image, isoErr := iso9660.OpenImage(openISO)
+	if isoErr != nil {
+		if xFile.prog != nil {
+			xFile.prog.done()
+		}
+
+		// ISO9660 reports BEA01 as "UDF volumes are not supported". The UDF reader
+		// already ran, so its error is the one that describes this file.
+		if errors.Is(isoErr, iso9660.ErrUDFNotSupported) {
+			return 0, nil, udfErr
+		}
+
+		return 0, nil, fmt.Errorf("failed to open iso image: %w", isoErr)
+	}
+
+	tracker, headerErr := xFile.archiveProgress(getUncompressedIsoSize(image))
+	defer tracker.done()
+
+	if headerErr != nil {
+		return 0, nil, headerErr
+	}
 
 	iso, err := iso9660.OpenImage(xFile.prog.readAter(openISO))
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to open iso image: %s: %w", xFile.FilePath, err)
+		return 0, nil, fmt.Errorf("failed to open iso image: %w", err)
 	}
 
 	root, err := iso.RootDir()
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to open iso root: %s: %w", xFile.FilePath, err)
+		return 0, nil, fmt.Errorf("failed to open iso root: %w", err)
 	}
 
-	// Extract directly to output directory (no ISO-name subfolder).
 	size, files, err := xFile.uniso(root, "")
 	if err != nil {
-		return size, files, fmt.Errorf("%s: %w", xFile.FilePath, err)
+		return size, files, err
 	}
 
 	return size, files, nil
@@ -64,16 +89,20 @@ func getUncompressedIsoSize(image *iso9660.Image) (total, _ uint64, count int) {
 	var loop func(isoFile *iso9660.File)
 
 	loop = func(isoFile *iso9660.File) {
-		count++
-
 		children, err := isoFile.GetChildren()
 		if err != nil {
 			return
 		}
 
 		for _, child := range children {
+			count++
+
+			if child.IsDir() {
+				loop(child)
+				continue
+			}
+
 			total += uint64(child.Size())
-			loop(child)
 		}
 	}
 
@@ -99,7 +128,14 @@ func (x *XFile) uniso(isoFile *iso9660.File, parent string) (uint64, []string, e
 	}
 
 	if itemName != "" {
-		err := x.mkDir(filepath.Join(x.OutputDir, itemName), isoFile.Mode(), isoFile.ModTime())
+		dirPath := x.clean(itemName)
+		if !x.pathWithinOutput(dirPath) {
+			// The directory is trying to land outside of our base path. Malicious ISO?
+			return 0, nil, fmt.Errorf("%s: %w: %s (from: %s)",
+				x.FilePath, ErrInvalidPath, dirPath, isoFile.Name())
+		}
+
+		err := x.mkDir(dirPath, isoFile.Mode(), isoFile.ModTime())
 		if err != nil {
 			return 0, nil, fmt.Errorf("making iso directory %s: %w", isoFile.Name(), err)
 		}
@@ -138,8 +174,7 @@ func (x *XFile) unisofile(isoFile *iso9660.File, wfile string) (uint64, []string
 		Mtime:    isoFile.ModTime(),
 	}
 
-	//nolint:gocritic // this 1-argument filepath.Join removes a ./ prefix should there be one.
-	if !strings.HasPrefix(file.Path, filepath.Join(x.OutputDir)) {
+	if !x.pathWithinOutput(file.Path) {
 		// The file being written is trying to write outside of our base path. Malicious ISO?
 		return 0, nil, fmt.Errorf("%s: %w: %s != %s (from: %s)",
 			x.FilePath, ErrInvalidPath, file.Path, x.OutputDir, isoFile.Name())
