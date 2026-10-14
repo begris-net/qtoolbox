@@ -1,8 +1,8 @@
 # atomicgo.dev/cursor v0.2.0
 ## explicit; go 1.15
 atomicgo.dev/cursor
-# atomicgo.dev/keyboard v0.2.9
-## explicit; go 1.15
+# atomicgo.dev/keyboard v0.2.10
+## explicit; go 1.25.0
 atomicgo.dev/keyboard
 atomicgo.dev/keyboard/internal
 atomicgo.dev/keyboard/keys
@@ -73,9 +73,6 @@ github.com/google/go-github/v57/github
 # github.com/google/go-querystring v1.1.0
 ## explicit; go 1.10
 github.com/google/go-querystring/query
-# github.com/gookit/color v1.6.0
-## explicit; go 1.18
-github.com/gookit/color
 # github.com/h2non/filetype v1.1.3
 ## explicit; go 1.13
 github.com/h2non/filetype
@@ -149,7 +146,7 @@ github.com/lithammer/fuzzysearch/fuzzy
 github.com/mariomac/gostream/item
 github.com/mariomac/gostream/order
 github.com/mariomac/gostream/stream
-# github.com/mattn/go-runewidth v0.0.20
+# github.com/mattn/go-runewidth v0.0.24
 ## explicit; go 1.20
 github.com/mattn/go-runewidth
 # github.com/mewkiz/flac v1.0.13
@@ -186,10 +183,11 @@ github.com/pierrec/lz4/v4/internal/lz4block
 github.com/pierrec/lz4/v4/internal/lz4errors
 github.com/pierrec/lz4/v4/internal/lz4stream
 github.com/pierrec/lz4/v4/internal/xxh32
-# github.com/pterm/pterm v0.12.83
-## explicit; go 1.24.0
+# github.com/pterm/pterm v0.12.84
+## explicit; go 1.26.0
 github.com/pterm/pterm
 github.com/pterm/pterm/internal
+github.com/pterm/pterm/internal/color
 # github.com/quic-go/qpack v0.6.0
 ## explicit; go 1.24
 github.com/quic-go/qpack
@@ -256,9 +254,6 @@ github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash
 github.com/ulikunitz/xz/internal/xlog
 github.com/ulikunitz/xz/lzma
-# github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
-## explicit; go 1.19
-github.com/xo/terminfo
 # go4.org v0.0.0-20260112195520-a5071408f32f
 ## explicit; go 1.24.0
 go4.org/readerutil
